@@ -17,7 +17,7 @@ import Image from '@tiptap/extension-image'
 import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff, FileText, X, Copy, ChevronsDown } from 'lucide-react'
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff, FileText, X, Copy, ChevronsDown, History, RotateCcw, Tag, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SlashCommand } from './extensions/SlashCommand'
 import { getSupabaseClient } from '@/lib/supabase/client'
@@ -26,6 +26,9 @@ import { useAppStore } from '@/store/appStore'
 import { TEMPLATES } from '@/lib/templates'
 import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
 import type { Editor } from '@tiptap/core'
+import { updatePagesList } from './extensions/PageLinkExtension'
+import { PageLinkExtension } from './extensions/PageLinkExtension'
+import type { DocMeta } from '@/types'
 
 const lowlight = createLowlight(common)
 
@@ -86,7 +89,7 @@ function SelectionToolbar({ editor }: { editor: Editor }) {
 }
 
 // Inner editor — only mounts when ydoc is ready
-function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitle: string; ydoc: Y.Doc }) {
+function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string; initialTitle: string; initialTags: string[]; ydoc: Y.Doc }) {
   const [title, setTitle] = useState(initialTitle)
   const [wordCount, setWordCount] = useState(0)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
@@ -101,6 +104,14 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
   const supabase = getSupabaseClient()
   const { pendingTemplate, setPendingTemplate } = useAppStore()
   const readTime = Math.max(1, Math.ceil(wordCount / 200))
+
+  const [tags, setTags] = useState<string[]>(initialTags)
+  const [tagInput, setTagInput] = useState('')
+  const [showTagInput, setShowTagInput] = useState(false)
+  const [versions, setVersions] = useState<{ id: string; created_at: string; content_html: string }[]>([])
+  const [showHistory, setShowHistory] = useState(false)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const lastSnapshotRef = useRef<number>(0)
 
   const handleVoiceTranscript = useCallback((text: string) => {
     if (!editorRef.current) return
@@ -149,6 +160,7 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
       CodeBlockLowlight.configure({ lowlight }),
       Image.configure({ inline: false, allowBase64: false }),
       SlashCommand,
+      PageLinkExtension,
     ],
     editorProps: {
       attributes: { class: 'tiptap' },
@@ -169,6 +181,7 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
     onUpdate: ({ editor }) => {
       setWordCount(editor.storage.characterCount?.words?.() ?? 0)
       setGhostText('')
+      saveVersion()
     },
     immediatelyRender: false,
   })
@@ -276,6 +289,55 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
     }
   }, [editor, isSummarizing, title])
 
+  const addTag = async (tag: string) => {
+    const trimmed = tag.trim().toLowerCase()
+    if (!trimmed || tags.includes(trimmed)) return
+    const next = [...tags, trimmed]
+    setTags(next)
+    await supabase.from('docs').update({ tags: next }).eq('id', docId)
+  }
+
+  const removeTag = async (tag: string) => {
+    const next = tags.filter(t => t !== tag)
+    setTags(next)
+    await supabase.from('docs').update({ tags: next }).eq('id', docId)
+  }
+
+  const saveVersion = useCallback(async () => {
+    if (!editor) return
+    const now = Date.now()
+    if (now - lastSnapshotRef.current < 5 * 60 * 1000) return // throttle to 5 min
+    const text = editor.getText().trim()
+    if (text.length < 30) return
+    lastSnapshotRef.current = now
+    const { data: { user } } = await supabase.auth.getUser()
+    if (!user) return
+    await supabase.from('doc_versions').insert({
+      doc_id: docId,
+      user_id: user.id,
+      content_html: editor.getHTML(),
+      text_content: text,
+    })
+  }, [editor, docId, supabase])
+
+  const loadVersions = async () => {
+    setHistoryLoading(true)
+    const { data } = await supabase
+      .from('doc_versions')
+      .select('id, created_at, content_html')
+      .eq('doc_id', docId)
+      .order('created_at', { ascending: false })
+      .limit(20)
+    setVersions((data || []) as { id: string; created_at: string; content_html: string }[])
+    setHistoryLoading(false)
+  }
+
+  const restoreVersion = (html: string) => {
+    if (!editor) return
+    editor.commands.setContent(html)
+    setShowHistory(false)
+  }
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Tab' && ghostText) { e.preventDefault(); acceptGhost() }
@@ -311,6 +373,39 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveTitle(title); (e.target as HTMLInputElement).blur() } }}
         placeholder="Untitled"
       />
+      {/* Tags */}
+      <div className="flex items-center flex-wrap gap-1.5 mb-6 -mt-4">
+        {tags.map(tag => (
+          <span key={tag} className="flex items-center gap-1 text-[11px] bg-[#7c6af7]/10 text-[#7c6af7] border border-[#7c6af7]/20 px-2 py-0.5 rounded-full">
+            #{tag}
+            <button onClick={() => removeTag(tag)} className="text-[#7c6af7]/60 hover:text-[#7c6af7] ml-0.5">
+              <X size={9} />
+            </button>
+          </span>
+        ))}
+        {showTagInput ? (
+          <input
+            autoFocus
+            className="text-[11px] bg-[#141416] border border-[#7c6af7]/30 text-[#e8e8ed] px-2 py-0.5 rounded-full outline-none w-28 placeholder-[#4a4a55]"
+            placeholder="Add tag…"
+            value={tagInput}
+            onChange={e => setTagInput(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { addTag(tagInput); setTagInput(''); setShowTagInput(false) }
+              if (e.key === 'Escape') { setTagInput(''); setShowTagInput(false) }
+              if (e.key === ',' || e.key === ' ') { e.preventDefault(); addTag(tagInput); setTagInput('') }
+            }}
+            onBlur={() => { if (tagInput) addTag(tagInput); setTagInput(''); setShowTagInput(false) }}
+          />
+        ) : (
+          <button
+            onClick={() => setShowTagInput(true)}
+            className="flex items-center gap-1 text-[11px] text-[#3a3a3f] hover:text-[#6b6b75] transition-colors"
+          >
+            <Plus size={10} /> tag
+          </button>
+        )}
+      </div>
       {/* Summary card */}
       {(summary || isSummarizing) && (
         <div className="mb-6 bg-[#141416] border border-[#7c6af7]/25 rounded-2xl overflow-hidden">
@@ -448,6 +543,17 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
           {isSummarizing ? 'Summarizing…' : 'Summarize'}
         </button>
         <button
+          onClick={() => { setShowHistory(h => !h); if (!showHistory) loadVersions() }}
+          className={cn(
+            'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors',
+            showHistory ? 'bg-[#7c6af7]/10 border-[#7c6af7]/30 text-[#7c6af7]' : 'bg-[#1a1a1d] border-[#2a2a2e] text-[#6b6b75] hover:bg-[#2a2a2e] hover:text-[#a0a0aa]'
+          )}
+          title="View version history"
+        >
+          <History size={12} />
+          History
+        </button>
+        <button
           onClick={triggerAI}
           disabled={isGenerating}
           className="flex items-center gap-1.5 text-xs bg-[#1a1a1d] border border-[#2a2a2e] text-[#7c6af7] px-3 py-1.5 rounded-full hover:bg-[#2a2a2e] transition-colors disabled:opacity-50"
@@ -456,14 +562,52 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
           {isGenerating ? 'Writing…' : 'AI Complete'}
         </button>
       </div>
+      {/* Version History Panel */}
+      {showHistory && (
+        <div className="fixed right-0 top-0 h-full w-80 bg-[#0d0d0f] border-l border-[#1e1e22] z-50 flex flex-col shadow-2xl">
+          <div className="flex items-center justify-between px-4 py-4 border-b border-[#1e1e22]">
+            <div className="flex items-center gap-2">
+              <History size={14} className="text-[#7c6af7]" />
+              <span className="text-sm font-semibold text-[#e8e8ed]">Version History</span>
+            </div>
+            <button onClick={() => setShowHistory(false)} className="w-6 h-6 flex items-center justify-center rounded-md text-[#4a4a55] hover:text-[#6b6b75] hover:bg-[#1e1e22] transition-colors">
+              <X size={13} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto py-2">
+            {historyLoading ? (
+              <div className="flex justify-center py-8">
+                <div className="flex gap-1">{[0,1,2].map(i=><div key={i} className="w-1.5 h-1.5 rounded-full bg-[#7c6af7] animate-bounce" style={{animationDelay:`${i*0.15}s`}}/>)}</div>
+              </div>
+            ) : versions.length === 0 ? (
+              <div className="px-4 py-8 text-center text-xs text-[#4a4a55]">No saved versions yet.<br/>Versions are saved automatically every 5 minutes while editing.</div>
+            ) : versions.map(v => (
+              <div key={v.id} className="px-4 py-3 border-b border-[#1e1e22] group hover:bg-[#141416] transition-colors">
+                <div className="text-xs text-[#a0a0aa] mb-1">{new Date(v.created_at).toLocaleString()}</div>
+                <div className="text-[11px] text-[#4a4a55] mb-2 line-clamp-2" dangerouslySetInnerHTML={{ __html: v.content_html.replace(/<[^>]+>/g,'').slice(0,120) }} />
+                <button
+                  onClick={() => restoreVersion(v.content_html)}
+                  className="flex items-center gap-1.5 text-[10px] text-[#7c6af7] hover:text-[#9080ff] transition-colors"
+                >
+                  <RotateCcw size={10} /> Restore this version
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // Outer wrapper — handles Yjs lifecycle, only renders EditorInner once ydoc is ready
-export default function NexusEditor({ docId, initialTitle }: { docId: string; initialTitle: string; userId: string }) {
+export default function NexusEditor({ docId, initialTitle, initialTags, docs }: { docId: string; initialTitle: string; initialTags?: string[]; userId: string; docs?: DocMeta[] }) {
   const [ydoc, setYdoc] = useState<Y.Doc | null>(null)
   const supabase = getSupabaseClient()
+
+  useEffect(() => {
+    if (docs) updatePagesList(docs.map(d => ({ id: d.id, title: d.title })))
+  }, [docs])
 
   useEffect(() => {
     const doc = new Y.Doc()
@@ -542,5 +686,5 @@ export default function NexusEditor({ docId, initialTitle }: { docId: string; in
     </div>
   )
 
-  return <EditorInner docId={docId} initialTitle={initialTitle} ydoc={ydoc} />
+  return <EditorInner docId={docId} initialTitle={initialTitle} initialTags={initialTags || []} ydoc={ydoc} />
 }

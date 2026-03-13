@@ -16,7 +16,9 @@ export default function DocPage({ params }: { params: Promise<{ docId: string }>
     <NexusEditor
       docId={docId}
       initialTitle={doc?.title || 'Untitled'}
+      initialTags={doc?.tags || []}
       userId={user.id}
+      docs={docs}
     />
   )
 }

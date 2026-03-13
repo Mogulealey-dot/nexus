@@ -76,6 +76,30 @@ export const SLASH_COMMANDS = [
     keywords: ['divider', 'hr', 'rule', 'separator'],
     command: (editor: Editor) => editor.chain().focus().setHorizontalRule().run(),
   },
+  {
+    title: 'Clip from URL',
+    description: 'Import content from a web page',
+    icon: '↓',
+    keywords: ['clip', 'url', 'import', 'web', 'fetch'],
+    command: async (editor: Editor) => {
+      const url = window.prompt('Paste a URL to clip:')
+      if (!url) return
+      try {
+        const resp = await fetch('/api/clip', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ url }),
+        })
+        if (!resp.ok) { alert('Could not fetch that URL.'); return }
+        const { title, text } = await resp.json()
+        editor.chain().focus()
+          .insertContent(`<h2>📎 ${title}</h2><p><em>Clipped from: ${url}</em></p><hr/><p>${text.split('\n').filter(Boolean).slice(0, 80).join('</p><p>')}</p>`)
+          .run()
+      } catch {
+        alert('Failed to clip URL.')
+      }
+    },
+  },
 ]
 
 export const SlashCommand = Extension.create({
