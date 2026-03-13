@@ -112,6 +112,7 @@ function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string
   const [showHistory, setShowHistory] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
   const lastSnapshotRef = useRef<number>(0)
+  const saveVersionRef = useRef<() => void>(() => {})
 
   const handleVoiceTranscript = useCallback((text: string) => {
     if (!editorRef.current) return
@@ -181,7 +182,7 @@ function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string
     onUpdate: ({ editor }) => {
       setWordCount(editor.storage.characterCount?.words?.() ?? 0)
       setGhostText('')
-      saveVersion()
+      saveVersionRef.current()
     },
     immediatelyRender: false,
   })
@@ -304,21 +305,27 @@ function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string
   }
 
   const saveVersion = useCallback(async () => {
-    if (!editor) return
+    const ed = editorRef.current
+    if (!ed) return
     const now = Date.now()
     if (now - lastSnapshotRef.current < 5 * 60 * 1000) return // throttle to 5 min
-    const text = editor.getText().trim()
+    const text = ed.getText().trim()
     if (text.length < 30) return
     lastSnapshotRef.current = now
-    const { data: { user } } = await supabase.auth.getUser()
-    if (!user) return
-    await supabase.from('doc_versions').insert({
-      doc_id: docId,
-      user_id: user.id,
-      content_html: editor.getHTML(),
-      text_content: text,
-    })
-  }, [editor, docId, supabase])
+    try {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      await supabase.from('doc_versions').insert({
+        doc_id: docId,
+        user_id: user.id,
+        content_html: ed.getHTML(),
+        text_content: text,
+      })
+    } catch {} // silently skip if table doesn't exist yet
+  }, [docId, supabase])
+
+  // Keep saveVersionRef pointing at the latest saveVersion
+  useEffect(() => { saveVersionRef.current = saveVersion }, [saveVersion])
 
   const loadVersions = async () => {
     setHistoryLoading(true)

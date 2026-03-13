@@ -16,8 +16,7 @@ export const PageLinkExtension = Extension.create({
   addOptions() {
     return {
       suggestion: {
-        char: '[[',
-        allowSpaces: true,
+        char: '@',
         command: ({ editor, range, props }: { editor: Editor; range: { from: number; to: number }; props: { id: string; title: string } }) => {
           editor.chain().focus().deleteRange(range).insertContent(
             `<a href="/docs/${props.id}">${props.title}</a>`
