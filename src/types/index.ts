@@ -6,6 +6,8 @@ export interface Doc {
   content: Uint8Array | null
   icon: string | null
   is_archived: boolean
+  is_starred: boolean
+  tags: string[]
   created_at: string
   updated_at: string
 }

@@ -16,11 +16,13 @@ import Collaboration from '@tiptap/extension-collaboration'
 import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles } from 'lucide-react'
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SlashCommand } from './extensions/SlashCommand'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { debounce } from '@/lib/utils'
+import { useAppStore } from '@/store/appStore'
+import { TEMPLATES } from '@/lib/templates'
 import type { Editor } from '@tiptap/core'
 
 const lowlight = createLowlight(common)
@@ -89,7 +91,9 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
   const [ghostText, setGhostText] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+  const templateApplied = useRef(false)
   const supabase = getSupabaseClient()
+  const { pendingTemplate, setPendingTemplate } = useAppStore()
   const readTime = Math.max(1, Math.ceil(wordCount / 200))
 
   const editor = useEditor({
@@ -115,6 +119,23 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
     },
     immediatelyRender: false,
   })
+
+  // Apply pending template on first load when doc is empty
+  useEffect(() => {
+    if (!editor || !pendingTemplate || templateApplied.current) return
+    const isEmpty = editor.state.doc.textContent.trim().length === 0
+    if (!isEmpty) return
+    const template = TEMPLATES.find(t => t.id === pendingTemplate)
+    if (template) {
+      editor.commands.setContent(template.content)
+      if (template.name !== 'Untitled') {
+        setTitle(template.name)
+        saveTitle(template.name)
+      }
+    }
+    templateApplied.current = true
+    setPendingTemplate(null)
+  }, [editor, pendingTemplate]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveTitle = async (t: string) => {
     setSaveStatus('saving')
@@ -201,6 +222,36 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
         </div>
       )}
       <div className="fixed bottom-6 right-6 flex items-center gap-3">
+        <button
+          onClick={() => {
+            const html = editor.getHTML()
+            // Simple HTML→Markdown conversion via blob download
+            const md = html
+              .replace(/<h1>(.*?)<\/h1>/g, '# $1\n')
+              .replace(/<h2>(.*?)<\/h2>/g, '## $1\n')
+              .replace(/<h3>(.*?)<\/h3>/g, '### $1\n')
+              .replace(/<strong>(.*?)<\/strong>/g, '**$1**')
+              .replace(/<em>(.*?)<\/em>/g, '*$1*')
+              .replace(/<code>(.*?)<\/code>/g, '`$1`')
+              .replace(/<li><p>(.*?)<\/p><\/li>/g, '- $1\n')
+              .replace(/<li>(.*?)<\/li>/g, '- $1\n')
+              .replace(/<p>(.*?)<\/p>/g, '$1\n')
+              .replace(/<br\s*\/?>/g, '\n')
+              .replace(/<[^>]+>/g, '')
+              .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+              .trim()
+            const blob = new Blob([`# ${title}\n\n${md}`], { type: 'text/markdown' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a')
+            a.href = url; a.download = `${title || 'untitled'}.md`; a.click()
+            URL.revokeObjectURL(url)
+          }}
+          className="flex items-center gap-1.5 text-xs bg-[#1a1a1d] border border-[#2a2a2e] text-[#6b6b75] px-3 py-1.5 rounded-full hover:bg-[#2a2a2e] hover:text-[#a0a0aa] transition-colors"
+          title="Export as Markdown"
+        >
+          <Download size={12} />
+          Export
+        </button>
         <div className="text-xs text-[#4a4a55]">{wordCount} words · {readTime} min read</div>
         <div className={cn(
           'flex items-center gap-1.5 text-xs transition-colors',

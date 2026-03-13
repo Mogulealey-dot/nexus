@@ -4,13 +4,17 @@ import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useDocs } from '@/hooks/useDocs'
 import { useCommandPalette } from '@/hooks/useCommandPalette'
+import { useOnlineStatus } from '@/hooks/useOnlineStatus'
 import AppSidebar from '@/components/sidebar/AppSidebar'
 import CommandPalette from '@/components/command-palette/CommandPalette'
+import { WifiOff } from 'lucide-react'
+import { AnimatePresence, motion } from 'framer-motion'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { user, signOut } = useAuth()
-  const { tree, docs, createDoc, updateTitle, archiveDoc } = useDocs(user?.id)
+  const { tree, docs, createDoc, updateTitle, archiveDoc, toggleStar } = useDocs(user?.id)
+  const isOnline = useOnlineStatus()
   useCommandPalette()
 
   useEffect(() => {
@@ -38,9 +42,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         onCreateDoc={createDoc}
         onArchiveDoc={archiveDoc}
         onRenameDoc={updateTitle}
+        onToggleStar={toggleStar}
       />
       <main className="flex-1 overflow-y-auto">{children}</main>
       <CommandPalette docs={docs} onCreateDoc={createDoc} onSignOut={handleSignOut} />
+
+      {/* Offline banner */}
+      <AnimatePresence>
+        {!isOnline && (
+          <motion.div
+            initial={{ y: 80, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            exit={{ y: 80, opacity: 0 }}
+            transition={{ duration: 0.2, ease: 'easeOut' }}
+            className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 bg-[#1a1a1d] border border-[#f5a623]/30 text-[#f5a623] text-xs px-4 py-2.5 rounded-full shadow-2xl"
+          >
+            <WifiOff size={13} />
+            You're offline — changes are saved locally and will sync when reconnected
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   )
 }

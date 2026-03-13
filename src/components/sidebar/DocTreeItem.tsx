@@ -1,6 +1,6 @@
 'use client'
 import { useState } from 'react'
-import { ChevronRight, FileText, Plus, Trash2, MoreHorizontal } from 'lucide-react'
+import { ChevronRight, FileText, Plus, Trash2, MoreHorizontal, Star } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { DocMeta } from '@/types'
 
@@ -12,9 +12,10 @@ interface Props {
   onCreateChild: (parentId: string) => void
   onArchive: (id: string) => void
   onRename: (id: string, title: string) => void
+  onToggleStar: (id: string) => void
 }
 
-export default function DocTreeItem({ doc, activeDocId, depth, onNavigate, onCreateChild, onArchive, onRename }: Props) {
+export default function DocTreeItem({ doc, activeDocId, depth, onNavigate, onCreateChild, onArchive, onRename, onToggleStar }: Props) {
   const [expanded, setExpanded] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
   const [editing, setEditing] = useState(false)
@@ -32,7 +33,6 @@ export default function DocTreeItem({ doc, activeDocId, depth, onNavigate, onCre
         style={{ paddingLeft: `${0.5 + depth * 1}rem` }}
         onClick={() => onNavigate(doc.id)}
       >
-        {/* Expand toggle */}
         <button
           onClick={e => { e.stopPropagation(); setExpanded(x => !x) }}
           className={cn('w-4 h-4 flex items-center justify-center flex-shrink-0 transition-transform', expanded ? 'rotate-90' : '', !hasChildren && 'opacity-0 pointer-events-none')}
@@ -56,7 +56,10 @@ export default function DocTreeItem({ doc, activeDocId, depth, onNavigate, onCre
           <span className="flex-1 truncate">{doc.title || 'Untitled'}</span>
         )}
 
-        {/* Actions */}
+        {doc.is_starred && !editing && (
+          <Star size={10} className="text-[#f5a623] fill-[#f5a623] flex-shrink-0 opacity-80" />
+        )}
+
         <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 ml-auto" onClick={e => e.stopPropagation()}>
           <button
             onClick={() => onCreateChild(doc.id)}
@@ -70,10 +73,15 @@ export default function DocTreeItem({ doc, activeDocId, depth, onNavigate, onCre
         </div>
 
         {showMenu && (
-          <div className="absolute right-2 top-full z-50 mt-1 bg-[#1a1a1d] border border-[#2a2a2e] rounded-lg shadow-xl py-1 w-36">
-            <button className="w-full px-3 py-1.5 text-left text-xs text-[#a0a0aa] hover:bg-[#2a2a2e] hover:text-[#e8e8ed] flex items-center gap-2"
+          <div className="absolute right-2 top-full z-50 mt-1 bg-[#1a1a1d] border border-[#2a2a2e] rounded-lg shadow-xl py-1 w-40">
+            <button className="w-full px-3 py-1.5 text-left text-xs text-[#a0a0aa] hover:bg-[#2a2a2e] hover:text-[#e8e8ed]"
               onClick={() => { setEditing(true); setShowMenu(false) }}>
               Rename
+            </button>
+            <button className="w-full px-3 py-1.5 text-left text-xs text-[#a0a0aa] hover:bg-[#2a2a2e] hover:text-[#e8e8ed] flex items-center gap-2"
+              onClick={() => { onToggleStar(doc.id); setShowMenu(false) }}>
+              <Star size={11} className={cn(doc.is_starred ? 'text-[#f5a623] fill-[#f5a623]' : '')} />
+              {doc.is_starred ? 'Unstar' : 'Star'}
             </button>
             <button className="w-full px-3 py-1.5 text-left text-xs text-[#f56565] hover:bg-[#2a2a2e] flex items-center gap-2"
               onClick={() => { onArchive(doc.id); setShowMenu(false) }}>
@@ -87,7 +95,8 @@ export default function DocTreeItem({ doc, activeDocId, depth, onNavigate, onCre
         <div>
           {doc.children!.map(child => (
             <DocTreeItem key={child.id} doc={child} activeDocId={activeDocId} depth={depth + 1}
-              onNavigate={onNavigate} onCreateChild={onCreateChild} onArchive={onArchive} onRename={onRename} />
+              onNavigate={onNavigate} onCreateChild={onCreateChild} onArchive={onArchive}
+              onRename={onRename} onToggleStar={onToggleStar} />
           ))}
         </div>
       )}

@@ -12,7 +12,7 @@ export function useDocs(userId: string | undefined) {
     if (!userId) { setLoading(false); return }
     const { data } = await supabase
       .from('docs')
-      .select('id, user_id, title, parent_id, icon, is_archived, created_at, updated_at')
+      .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, created_at, updated_at')
       .eq('user_id', userId)
       .eq('is_archived', false)
       .order('created_at', { ascending: true })
@@ -43,10 +43,18 @@ export function useDocs(userId: string | undefined) {
     await fetchDocs()
   }
 
-  // Build tree from flat list
-  const tree = buildTree(docs)
+  const toggleStar = async (id: string) => {
+    const doc = docs.find(d => d.id === id)
+    if (!doc) return
+    const next = !doc.is_starred
+    await supabase.from('docs').update({ is_starred: next }).eq('id', id)
+    setDocs(prev => prev.map(d => d.id === id ? { ...d, is_starred: next } : d))
+  }
 
-  return { docs, tree, loading, createDoc, updateTitle, archiveDoc, refetch: fetchDocs }
+  const tree = buildTree(docs)
+  const starred = docs.filter(d => d.is_starred)
+
+  return { docs, tree, starred, loading, createDoc, updateTitle, archiveDoc, toggleStar, refetch: fetchDocs }
 }
 
 function buildTree(docs: DocMeta[]): DocMeta[] {
