@@ -480,6 +480,23 @@ export default function NexusEditor({ docId, initialTitle }: { docId: string; in
         updated_at: new Date().toISOString(),
       }).eq('id', docId)
 
+      // Auto-backup text to localStorage (fallback if web app is unavailable)
+      try {
+        const backupKey = `nexus-note-${docId}`
+        localStorage.setItem(backupKey, JSON.stringify({
+          id: docId,
+          text: textContent,
+          saved_at: new Date().toISOString(),
+        }))
+        // Maintain an index of backed-up note IDs
+        const indexRaw = localStorage.getItem('nexus-backup-index')
+        const index: string[] = indexRaw ? JSON.parse(indexRaw) : []
+        if (!index.includes(docId)) {
+          index.push(docId)
+          localStorage.setItem('nexus-backup-index', JSON.stringify(index))
+        }
+      } catch {} // storage quota exceeded — silently skip
+
       // Generate and store embedding for semantic search (fire-and-forget)
       if (textContent.trim().length > 30) {
         try {

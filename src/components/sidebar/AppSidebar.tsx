@@ -4,6 +4,7 @@ import { Search, Plus, ChevronLeft, Sparkles, Star, CheckSquare, Home } from 'lu
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
 import DocTreeItem from './DocTreeItem'
+import BackupButton from './BackupButton'
 import type { DocMeta } from '@/types'
 import type { User } from '@supabase/supabase-js'
 
@@ -170,6 +171,9 @@ export default function AppSidebar({ user, tree, onSignOut, onCreateDoc, onArchi
 
             {/* User */}
             <div className="border-t border-[#1e1e22] px-3 py-3">
+              <div className="flex items-center justify-between mb-2.5">
+                <BackupButton userId={user.id} />
+              </div>
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#7c6af7] to-[#34c972] flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
                   {user.email?.[0]?.toUpperCase() || '?'}
