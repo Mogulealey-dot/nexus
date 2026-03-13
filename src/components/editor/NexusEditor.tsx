@@ -85,10 +85,12 @@ function SelectionToolbar({ editor }: { editor: Editor }) {
 function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitle: string; ydoc: Y.Doc }) {
   const [title, setTitle] = useState(initialTitle)
   const [wordCount, setWordCount] = useState(0)
+  const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const [ghostText, setGhostText] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const supabase = getSupabaseClient()
+  const readTime = Math.max(1, Math.ceil(wordCount / 200))
 
   const editor = useEditor({
     extensions: [
@@ -115,10 +117,12 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
   })
 
   const saveTitle = async (t: string) => {
+    setSaveStatus('saving')
     await supabase.from('docs').update({ title: t || 'Untitled', updated_at: new Date().toISOString() }).eq('id', docId)
+    setSaveStatus('saved')
   }
 
-  const handleTitleChange = (t: string) => setTitle(t)
+  const handleTitleChange = (t: string) => { setTitle(t); setSaveStatus('unsaved') }
 
   const triggerAI = useCallback(async () => {
     if (!editor || isGenerating) return
@@ -197,8 +201,14 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
         </div>
       )}
       <div className="fixed bottom-6 right-6 flex items-center gap-3">
-        <div className="text-xs text-[#4a4a55]">{wordCount} words</div>
-        <div className="w-1.5 h-1.5 rounded-full bg-[#34c972]" title="Synced" />
+        <div className="text-xs text-[#4a4a55]">{wordCount} words · {readTime} min read</div>
+        <div className={cn(
+          'flex items-center gap-1.5 text-xs transition-colors',
+          saveStatus === 'saved' ? 'text-[#34c972]' : saveStatus === 'saving' ? 'text-[#f5a623]' : 'text-[#4a4a55]'
+        )}>
+          <div className={cn('w-1.5 h-1.5 rounded-full', saveStatus === 'saving' && 'animate-pulse', saveStatus === 'saved' ? 'bg-[#34c972]' : saveStatus === 'saving' ? 'bg-[#f5a623]' : 'bg-[#4a4a55]')} />
+          {saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved'}
+        </div>
         <button
           onClick={triggerAI}
           disabled={isGenerating}
