@@ -17,13 +17,14 @@ import Image from '@tiptap/extension-image'
 import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus } from 'lucide-react'
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SlashCommand } from './extensions/SlashCommand'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import { debounce } from '@/lib/utils'
 import { useAppStore } from '@/store/appStore'
 import { TEMPLATES } from '@/lib/templates'
+import { useSpeechRecognition } from '@/hooks/useSpeechRecognition'
 import type { Editor } from '@tiptap/core'
 
 const lowlight = createLowlight(common)
@@ -98,6 +99,13 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
   const supabase = getSupabaseClient()
   const { pendingTemplate, setPendingTemplate } = useAppStore()
   const readTime = Math.max(1, Math.ceil(wordCount / 200))
+
+  const handleVoiceTranscript = useCallback((text: string) => {
+    if (!editorRef.current) return
+    editorRef.current.chain().focus().insertContent(' ' + text + ' ').run()
+  }, [])
+
+  const { isRecording, interimText, isSupported: isSpeechSupported, toggle: toggleRecording } = useSpeechRecognition(handleVoiceTranscript)
 
   const uploadImage = useCallback(async (file: File): Promise<string | null> => {
     const ext = file.name.split('.').pop()
@@ -268,6 +276,15 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
         placeholder="Untitled"
       />
       <EditorContent editor={editor} />
+
+      {/* Voice interim transcript preview */}
+      {isRecording && (
+        <div className="mt-2 flex items-center gap-2 text-sm text-[#6b6b75] italic select-none">
+          <span className="w-2 h-2 rounded-full bg-[#f56565] animate-pulse flex-shrink-0" />
+          {interimText || 'Listening…'}
+        </div>
+      )}
+
       {ghostText && (
         <div className="mt-1 text-[#4a4a55] italic text-base leading-7 select-none">
           {ghostText}
@@ -322,6 +339,21 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
           <ImagePlus size={12} />
           {isUploadingImage ? 'Uploading…' : 'Image'}
         </button>
+        {isSpeechSupported && (
+          <button
+            onClick={toggleRecording}
+            className={cn(
+              'flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors',
+              isRecording
+                ? 'bg-[#f56565]/15 border-[#f56565]/30 text-[#f56565] hover:bg-[#f56565]/20'
+                : 'bg-[#1a1a1d] border-[#2a2a2e] text-[#6b6b75] hover:bg-[#2a2a2e] hover:text-[#a0a0aa]'
+            )}
+            title="Voice dictation (click to start/stop)"
+          >
+            {isRecording ? <MicOff size={12} /> : <Mic size={12} />}
+            {isRecording ? 'Stop' : 'Dictate'}
+          </button>
+        )}
         <button
           onClick={triggerAI}
           disabled={isGenerating}
