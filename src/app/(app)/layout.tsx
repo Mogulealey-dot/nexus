@@ -13,7 +13,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { user, signOut } = useAuth()
-  const { tree, docs, createDoc, updateTitle, archiveDoc, toggleStar } = useDocs(user?.id)
+  const { tree, docs, createDoc, updateTitle, archiveDoc, toggleStar, searchDocs } = useDocs(user?.id)
   const isOnline = useOnlineStatus()
   useCommandPalette()
 
@@ -45,7 +45,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         onToggleStar={toggleStar}
       />
       <main className="flex-1 overflow-y-auto">{children}</main>
-      <CommandPalette docs={docs} onCreateDoc={createDoc} onSignOut={handleSignOut} />
+      <CommandPalette docs={docs} onCreateDoc={createDoc} onSignOut={handleSignOut} onSearch={searchDocs} />
 
       {/* Offline banner */}
       <AnimatePresence>

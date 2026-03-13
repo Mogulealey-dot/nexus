@@ -1,8 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Command } from 'cmdk'
 import { motion, AnimatePresence } from 'framer-motion'
-import { FileText, Plus, LogOut, Keyboard, PanelLeft, LayoutTemplate, ChevronLeft } from 'lucide-react'
+import { FileText, Plus, LogOut, Keyboard, PanelLeft, LayoutTemplate, ChevronLeft, Search } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { useAppStore } from '@/store/appStore'
 import { TEMPLATES } from '@/lib/templates'
@@ -12,6 +12,7 @@ interface Props {
   docs: DocMeta[]
   onCreateDoc: () => Promise<string | null>
   onSignOut: () => void
+  onSearch: (q: string) => Promise<DocMeta[]>
 }
 
 const SHORTCUTS = [
@@ -25,16 +26,33 @@ const SHORTCUTS = [
 
 type View = 'main' | 'templates' | 'shortcuts'
 
-export default function CommandPalette({ docs, onCreateDoc, onSignOut }: Props) {
+export default function CommandPalette({ docs, onCreateDoc, onSignOut, onSearch }: Props) {
   const router = useRouter()
   const { commandPaletteOpen, setCommandPaletteOpen, toggleSidebar, setPendingTemplate } = useAppStore()
   const [query, setQuery] = useState('')
   const [view, setView] = useState<View>('main')
+  const [searchResults, setSearchResults] = useState<DocMeta[]>([])
+  const [isSearching, setIsSearching] = useState(false)
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Full-text search with debounce
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current)
+    if (!query.trim()) { setSearchResults([]); setIsSearching(false); return }
+    setIsSearching(true)
+    searchTimer.current = setTimeout(async () => {
+      const results = await onSearch(query)
+      setSearchResults(results)
+      setIsSearching(false)
+    }, 250)
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current) }
+  }, [query, onSearch])
 
   const close = () => {
     setCommandPaletteOpen(false)
     setQuery('')
     setView('main')
+    setSearchResults([])
   }
 
   const handleSelect = (action: () => void) => {
@@ -42,9 +60,7 @@ export default function CommandPalette({ docs, onCreateDoc, onSignOut }: Props) 
     close()
   }
 
-  const filteredDocs = query.trim()
-    ? docs.filter(d => d.title.toLowerCase().includes(query.toLowerCase()))
-    : docs.slice(0, 8)
+  const displayDocs = query.trim() ? searchResults : docs.slice(0, 8)
 
   return (
     <AnimatePresence>
@@ -180,8 +196,16 @@ export default function CommandPalette({ docs, onCreateDoc, onSignOut }: Props) 
 
                 {/* Pages */}
                 {view === 'main' && (
-                  <Command.Group heading={query ? `Pages matching "${query}"` : 'Recent Pages'} className="px-2 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:text-[#3a3a3f] [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider">
-                    {filteredDocs.length === 0 && query ? null : filteredDocs.map(doc => (
+                  <Command.Group
+                    heading={query ? `Search results ${isSearching ? '…' : `(${displayDocs.length})`}` : 'Recent Pages'}
+                    className="px-2 [&_[cmdk-group-heading]]:text-[10px] [&_[cmdk-group-heading]]:text-[#3a3a3f] [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:py-1.5 [&_[cmdk-group-heading]]:font-semibold [&_[cmdk-group-heading]]:uppercase [&_[cmdk-group-heading]]:tracking-wider"
+                  >
+                    {isSearching && (
+                      <div className="flex items-center gap-2 px-3 py-2 text-xs text-[#4a4a55]">
+                        <Search size={12} className="animate-pulse" /> Searching…
+                      </div>
+                    )}
+                    {!isSearching && displayDocs.length === 0 && query ? null : displayDocs.map(doc => (
                       <Command.Item
                         key={doc.id}
                         value={doc.title}

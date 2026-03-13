@@ -13,10 +13,11 @@ import Link from '@tiptap/extension-link'
 import TextAlign from '@tiptap/extension-text-align'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import Collaboration from '@tiptap/extension-collaboration'
+import Image from '@tiptap/extension-image'
 import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download } from 'lucide-react'
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SlashCommand } from './extensions/SlashCommand'
 import { getSupabaseClient } from '@/lib/supabase/client'
@@ -92,9 +93,28 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
   const [isGenerating, setIsGenerating] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const templateApplied = useRef(false)
+  const imageInputRef = useRef<HTMLInputElement | null>(null)
   const supabase = getSupabaseClient()
   const { pendingTemplate, setPendingTemplate } = useAppStore()
   const readTime = Math.max(1, Math.ceil(wordCount / 200))
+
+  const uploadImage = useCallback(async (file: File): Promise<string | null> => {
+    const ext = file.name.split('.').pop()
+    const path = `${docId}/${Date.now()}.${ext}`
+    const { error } = await supabase.storage.from('doc-images').upload(path, file, { upsert: true })
+    if (error) return null
+    const { data } = supabase.storage.from('doc-images').getPublicUrl(path)
+    return data.publicUrl
+  }, [docId, supabase])
+
+  const editorRef = useRef<Editor | null>(null)
+
+  const insertImage = useCallback(async (file: File) => {
+    const ed = editorRef.current
+    if (!ed) return
+    const url = await uploadImage(file)
+    if (url) ed.chain().focus().setImage({ src: url, alt: file.name }).run()
+  }, [uploadImage])
 
   const editor = useEditor({
     extensions: [
@@ -110,15 +130,34 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
       Link.configure({ openOnClick: false }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       CodeBlockLowlight.configure({ lowlight }),
+      Image.configure({ inline: false, allowBase64: false }),
       SlashCommand,
     ],
-    editorProps: { attributes: { class: 'tiptap' } },
+    editorProps: {
+      attributes: { class: 'tiptap' },
+      handleDrop: (view, event) => {
+        const files = Array.from(event.dataTransfer?.files || []).filter(f => f.type.startsWith('image/'))
+        if (!files.length) return false
+        event.preventDefault()
+        files.forEach(f => insertImage(f))
+        return true
+      },
+      handlePaste: (view, event) => {
+        const files = Array.from(event.clipboardData?.files || []).filter(f => f.type.startsWith('image/'))
+        if (!files.length) return false
+        files.forEach(f => insertImage(f))
+        return true
+      },
+    },
     onUpdate: ({ editor }) => {
       setWordCount(editor.storage.characterCount?.words?.() ?? 0)
       setGhostText('')
     },
     immediatelyRender: false,
   })
+
+  // Keep editorRef in sync
+  useEffect(() => { editorRef.current = editor }, [editor])
 
   // Apply pending template on first load when doc is empty
   useEffect(() => {
@@ -205,6 +244,13 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
 
   return (
     <div className="relative max-w-3xl mx-auto px-8 py-12">
+      <input
+        ref={imageInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={e => { const f = e.target.files?.[0]; if (f) insertImage(f); e.target.value = '' }}
+      />
       <SelectionToolbar editor={editor} />
       <input
         className="w-full text-4xl font-bold bg-transparent border-none outline-none text-[#e8e8ed] placeholder-[#3a3a3f] mb-8 tracking-tight"
@@ -261,6 +307,14 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
           {saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved'}
         </div>
         <button
+          onClick={() => imageInputRef.current?.click()}
+          className="flex items-center gap-1.5 text-xs bg-[#1a1a1d] border border-[#2a2a2e] text-[#6b6b75] px-3 py-1.5 rounded-full hover:bg-[#2a2a2e] hover:text-[#a0a0aa] transition-colors"
+          title="Upload image (or drag & drop)"
+        >
+          <ImagePlus size={12} />
+          Image
+        </button>
+        <button
           onClick={triggerAI}
           disabled={isGenerating}
           className="flex items-center gap-1.5 text-xs bg-[#1a1a1d] border border-[#2a2a2e] text-[#7c6af7] px-3 py-1.5 rounded-full hover:bg-[#2a2a2e] transition-colors disabled:opacity-50"
@@ -284,7 +338,13 @@ export default function NexusEditor({ docId, initialTitle }: { docId: string; in
 
     const syncToCloud = debounce(async () => {
       const update = Y.encodeStateAsUpdate(doc)
-      await supabase.from('docs').update({ content: Array.from(update), updated_at: new Date().toISOString() }).eq('id', docId)
+      // Also persist plain text for full-text search
+      const ytext = doc.getText('content')
+      await supabase.from('docs').update({
+        content: Array.from(update),
+        text_content: ytext.toString(),
+        updated_at: new Date().toISOString(),
+      }).eq('id', docId)
     }, 1500)
 
     persistence.whenSynced.then(async () => {

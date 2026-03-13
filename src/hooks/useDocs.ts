@@ -51,10 +51,22 @@ export function useDocs(userId: string | undefined) {
     setDocs(prev => prev.map(d => d.id === id ? { ...d, is_starred: next } : d))
   }
 
+  const searchDocs = async (query: string): Promise<DocMeta[]> => {
+    if (!userId || !query.trim()) return []
+    const { data } = await supabase
+      .from('docs')
+      .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, created_at, updated_at')
+      .eq('user_id', userId)
+      .eq('is_archived', false)
+      .or(`title.ilike.%${query}%,text_content.ilike.%${query}%`)
+      .limit(20)
+    return (data as DocMeta[]) || []
+  }
+
   const tree = buildTree(docs)
   const starred = docs.filter(d => d.is_starred)
 
-  return { docs, tree, starred, loading, createDoc, updateTitle, archiveDoc, toggleStar, refetch: fetchDocs }
+  return { docs, tree, starred, loading, createDoc, updateTitle, archiveDoc, toggleStar, searchDocs, refetch: fetchDocs }
 }
 
 function buildTree(docs: DocMeta[]): DocMeta[] {
