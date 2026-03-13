@@ -378,14 +378,28 @@ export default function NexusEditor({ docId, initialTitle }: { docId: string; in
 
     const syncToCloud = debounce(async () => {
       const update = Y.encodeStateAsUpdate(doc)
-      // Also persist plain text for full-text search
       const ytext = doc.getText('content')
+      const textContent = ytext.toString()
+
       await supabase.from('docs').update({
         content: Array.from(update),
-        text_content: ytext.toString(),
+        text_content: textContent,
         updated_at: new Date().toISOString(),
       }).eq('id', docId)
-    }, 1500)
+
+      // Generate and store embedding for semantic search (fire-and-forget)
+      if (textContent.trim().length > 30) {
+        try {
+          const resp = await fetch('/api/ai/embed', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ text: textContent.slice(0, 512) }),
+          })
+          const { embedding } = await resp.json()
+          if (embedding) await supabase.from('docs').update({ embedding }).eq('id', docId)
+        } catch {}
+      }
+    }, 2000)
 
     persistence.whenSynced.then(async () => {
       const ytext = doc.getText('content')

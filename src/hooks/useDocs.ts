@@ -53,14 +53,59 @@ export function useDocs(userId: string | undefined) {
 
   const searchDocs = async (query: string): Promise<DocMeta[]> => {
     if (!userId || !query.trim()) return []
-    const { data } = await supabase
-      .from('docs')
-      .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, created_at, updated_at')
-      .eq('user_id', userId)
-      .eq('is_archived', false)
-      .or(`title.ilike.%${query}%,text_content.ilike.%${query}%`)
-      .limit(20)
-    return (data as DocMeta[]) || []
+
+    // Run keyword search and semantic search in parallel
+    const [keywordRes, semanticRes] = await Promise.allSettled([
+      // Keyword search
+      supabase
+        .from('docs')
+        .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, created_at, updated_at')
+        .eq('user_id', userId)
+        .eq('is_archived', false)
+        .or(`title.ilike.%${query}%,text_content.ilike.%${query}%`)
+        .limit(10),
+
+      // Semantic search — generate embedding then query match_docs RPC
+      (async () => {
+        const resp = await fetch('/api/ai/embed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ text: query }),
+        })
+        const { embedding } = await resp.json()
+        if (!embedding) return { data: [] }
+        return supabase.rpc('match_docs', {
+          query_embedding: embedding,
+          match_threshold: 0.25,
+          match_count: 10,
+          p_user_id: userId,
+        })
+      })(),
+    ])
+
+    const keywordIds = new Set<string>()
+    const results: DocMeta[] = []
+
+    // Add keyword results first
+    if (keywordRes.status === 'fulfilled' && keywordRes.value.data) {
+      for (const d of keywordRes.value.data as DocMeta[]) {
+        keywordIds.add(d.id)
+        results.push(d)
+      }
+    }
+
+    // Add semantic results that weren't already found by keyword search
+    if (semanticRes.status === 'fulfilled') {
+      const semanticData = (semanticRes.value as { data: { id: string }[] | null }).data || []
+      for (const row of semanticData) {
+        if (!keywordIds.has(row.id)) {
+          const doc = docs.find(d => d.id === row.id)
+          if (doc) results.push(doc)
+        }
+      }
+    }
+
+    return results.slice(0, 15)
   }
 
   const tree = buildTree(docs)
