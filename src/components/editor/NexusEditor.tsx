@@ -25,12 +25,6 @@ import type { Editor } from '@tiptap/core'
 
 const lowlight = createLowlight(common)
 
-interface Props {
-  docId: string
-  initialTitle: string
-  userId: string
-}
-
 // Floating selection toolbar
 function SelectionToolbar({ editor }: { editor: Editor }) {
   const [rect, setRect] = useState<DOMRect | null>(null)
@@ -47,9 +41,10 @@ function SelectionToolbar({ editor }: { editor: Editor }) {
       setRect(r)
       setShow(true)
     }
+    const hide = () => setShow(false)
     editor.on('selectionUpdate', update)
-    editor.on('blur', () => setShow(false))
-    return () => { editor.off('selectionUpdate', update); editor.off('blur', () => setShow(false)) }
+    editor.on('blur', hide)
+    return () => { editor.off('selectionUpdate', update); editor.off('blur', hide) }
   }, [editor])
 
   if (!show || !rect) return null
@@ -86,55 +81,19 @@ function SelectionToolbar({ editor }: { editor: Editor }) {
   )
 }
 
-export default function NexusEditor({ docId, initialTitle, userId }: Props) {
+// Inner editor — only mounts when ydoc is ready
+function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitle: string; ydoc: Y.Doc }) {
   const [title, setTitle] = useState(initialTitle)
-  const [synced, setSynced] = useState(false)
   const [wordCount, setWordCount] = useState(0)
   const [ghostText, setGhostText] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
-  const ydocRef = useRef<Y.Doc | null>(null)
   const abortRef = useRef<AbortController | null>(null)
   const supabase = getSupabaseClient()
-
-  // Init Yjs doc
-  useEffect(() => {
-    const ydoc = new Y.Doc()
-    ydocRef.current = ydoc
-
-    const persistence = new IndexeddbPersistence(`nexus-doc-${docId}`, ydoc)
-    persistence.whenSynced.then(async () => {
-      const ytext = ydoc.getText('content')
-      if (ytext.length === 0) {
-        const { data } = await supabase.from('docs').select('content').eq('id', docId).single()
-        if (data?.content) {
-          try {
-            const bytes = new Uint8Array(Object.values(data.content as Record<string, number>))
-            Y.applyUpdate(ydoc, bytes)
-          } catch {}
-        }
-      }
-      setSynced(true)
-    })
-
-    const syncToCloud = debounce(async () => {
-      const update = Y.encodeStateAsUpdate(ydoc)
-      await supabase.from('docs').update({ content: Array.from(update), updated_at: new Date().toISOString() }).eq('id', docId)
-    }, 1500)
-    ydoc.on('update', syncToCloud)
-
-    return () => {
-      ydoc.off('update', syncToCloud)
-      persistence.destroy()
-      ydoc.destroy()
-      ydocRef.current = null
-      setSynced(false)
-    }
-  }, [docId, supabase])
 
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ codeBlock: false }),
-      Collaboration.configure({ document: ydocRef.current! }),
+      Collaboration.configure({ document: ydoc }),
       Placeholder.configure({ placeholder: "Write something, or press '/' for commands…" }),
       CharacterCount,
       Typography,
@@ -147,24 +106,20 @@ export default function NexusEditor({ docId, initialTitle, userId }: Props) {
       CodeBlockLowlight.configure({ lowlight }),
       SlashCommand,
     ],
-    editorProps: {
-      attributes: { class: 'tiptap' },
-    },
+    editorProps: { attributes: { class: 'tiptap' } },
     onUpdate: ({ editor }) => {
       setWordCount(editor.storage.characterCount?.words?.() ?? 0)
       setGhostText('')
     },
     immediatelyRender: false,
-  }, [synced])
+  })
 
-  // Save title (debounced)
-  const saveTitle = useCallback(debounce(async (t: string) => {
-    await supabase.from('docs').update({ title: t, updated_at: new Date().toISOString() }).eq('id', docId)
-  }, 800), [docId, supabase])
+  const saveTitle = async (t: string) => {
+    await supabase.from('docs').update({ title: t || 'Untitled', updated_at: new Date().toISOString() }).eq('id', docId)
+  }
 
-  const handleTitleChange = (t: string) => { setTitle(t); saveTitle(t) }
+  const handleTitleChange = (t: string) => setTitle(t)
 
-  // AI Ghost Writer
   const triggerAI = useCallback(async () => {
     if (!editor || isGenerating) return
     const text = editor.getText()
@@ -215,42 +170,35 @@ export default function NexusEditor({ docId, initialTitle, userId }: Props) {
     return () => window.removeEventListener('keydown', handler)
   }, [ghostText, acceptGhost])
 
-  if (!synced || !editor) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="flex gap-1.5">
-          {[0, 1, 2].map(i => <div key={i} className="w-2 h-2 rounded-full bg-[#7c6af7] animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />)}
-        </div>
+  if (!editor) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="flex gap-1.5">
+        {[0, 1, 2].map(i => <div key={i} className="w-2 h-2 rounded-full bg-[#7c6af7] animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />)}
       </div>
-    )
-  }
+    </div>
+  )
 
   return (
     <div className="relative max-w-3xl mx-auto px-8 py-12">
       <SelectionToolbar editor={editor} />
-
-      {/* Title */}
       <input
         className="w-full text-4xl font-bold bg-transparent border-none outline-none text-[#e8e8ed] placeholder-[#3a3a3f] mb-8 tracking-tight"
         value={title}
         onChange={e => handleTitleChange(e.target.value)}
+        onBlur={e => saveTitle(e.target.value)}
+        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveTitle(title); (e.target as HTMLInputElement).blur() } }}
         placeholder="Untitled"
       />
-
       <EditorContent editor={editor} />
-
-      {/* Ghost text */}
       {ghostText && (
         <div className="mt-1 text-[#4a4a55] italic text-base leading-7 select-none">
           {ghostText}
           <span className="ml-2 text-xs text-[#3a3a3f] not-italic font-medium">Tab to accept · Esc to dismiss</span>
         </div>
       )}
-
-      {/* Footer bar */}
       <div className="fixed bottom-6 right-6 flex items-center gap-3">
         <div className="text-xs text-[#4a4a55]">{wordCount} words</div>
-        <div className={cn('w-1.5 h-1.5 rounded-full', synced ? 'bg-[#34c972]' : 'bg-[#f5a623]')} title={synced ? 'Synced' : 'Syncing…'} />
+        <div className="w-1.5 h-1.5 rounded-full bg-[#34c972]" title="Synced" />
         <button
           onClick={triggerAI}
           disabled={isGenerating}
@@ -262,4 +210,52 @@ export default function NexusEditor({ docId, initialTitle, userId }: Props) {
       </div>
     </div>
   )
+}
+
+// Outer wrapper — handles Yjs lifecycle, only renders EditorInner once ydoc is ready
+export default function NexusEditor({ docId, initialTitle }: { docId: string; initialTitle: string; userId: string }) {
+  const [ydoc, setYdoc] = useState<Y.Doc | null>(null)
+  const supabase = getSupabaseClient()
+
+  useEffect(() => {
+    const doc = new Y.Doc()
+    const persistence = new IndexeddbPersistence(`nexus-doc-${docId}`, doc)
+
+    const syncToCloud = debounce(async () => {
+      const update = Y.encodeStateAsUpdate(doc)
+      await supabase.from('docs').update({ content: Array.from(update), updated_at: new Date().toISOString() }).eq('id', docId)
+    }, 1500)
+
+    persistence.whenSynced.then(async () => {
+      const ytext = doc.getText('content')
+      if (ytext.length === 0) {
+        const { data } = await supabase.from('docs').select('content').eq('id', docId).single()
+        if (data?.content) {
+          try {
+            const bytes = new Uint8Array(Object.values(data.content as Record<string, number>))
+            Y.applyUpdate(doc, bytes)
+          } catch {}
+        }
+      }
+      doc.on('update', syncToCloud)
+      setYdoc(doc)
+    })
+
+    return () => {
+      doc.off('update', syncToCloud)
+      persistence.destroy()
+      doc.destroy()
+      setYdoc(null)
+    }
+  }, [docId, supabase])
+
+  if (!ydoc) return (
+    <div className="flex items-center justify-center h-64">
+      <div className="flex gap-1.5">
+        {[0, 1, 2].map(i => <div key={i} className="w-2 h-2 rounded-full bg-[#7c6af7] animate-bounce" style={{ animationDelay: `${i * 0.15}s` }} />)}
+      </div>
+    </div>
+  )
+
+  return <EditorInner docId={docId} initialTitle={initialTitle} ydoc={ydoc} />
 }
