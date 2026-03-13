@@ -17,7 +17,7 @@ import Image from '@tiptap/extension-image'
 import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff } from 'lucide-react'
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff, FileText, X, Copy, ChevronsDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SlashCommand } from './extensions/SlashCommand'
 import { getSupabaseClient } from '@/lib/supabase/client'
@@ -93,6 +93,8 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
   const [ghostText, setGhostText] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [isUploadingImage, setIsUploadingImage] = useState(false)
+  const [summary, setSummary] = useState('')
+  const [isSummarizing, setIsSummarizing] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const templateApplied = useRef(false)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
@@ -240,6 +242,40 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
     setGhostText('')
   }, [ghostText, editor])
 
+  const summarizeDoc = useCallback(async () => {
+    if (!editor || isSummarizing) return
+    const text = editor.getText().trim()
+    if (text.length < 50) return
+
+    setIsSummarizing(true)
+    setSummary('')
+
+    try {
+      const resp = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{ role: 'user', content: `Please summarize the following note concisely. Give a 2-3 sentence overview, then 3-5 key bullet points.\n\nTitle: ${title}\n\n${text.slice(0, 3000)}` }],
+          currentPageTitle: title,
+        }),
+      })
+      const reader = resp.body?.getReader()
+      if (!reader) return
+      const decoder = new TextDecoder()
+      let accumulated = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        accumulated += decoder.decode(value, { stream: true })
+        setSummary(accumulated)
+      }
+    } catch {
+      setSummary('')
+    } finally {
+      setIsSummarizing(false)
+    }
+  }, [editor, isSummarizing, title])
+
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Tab' && ghostText) { e.preventDefault(); acceptGhost() }
@@ -275,6 +311,54 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveTitle(title); (e.target as HTMLInputElement).blur() } }}
         placeholder="Untitled"
       />
+      {/* Summary card */}
+      {(summary || isSummarizing) && (
+        <div className="mb-6 bg-[#141416] border border-[#7c6af7]/25 rounded-2xl overflow-hidden">
+          <div className="flex items-center justify-between px-4 py-3 border-b border-[#1e1e22]">
+            <div className="flex items-center gap-2">
+              <div className="w-5 h-5 rounded-md bg-gradient-to-br from-[#7c6af7] to-[#9080ff] flex items-center justify-center">
+                <Sparkles size={11} className="text-white" />
+              </div>
+              <span className="text-xs font-semibold text-[#a0a0aa]">AI Summary</span>
+              {isSummarizing && <span className="w-1.5 h-1.5 rounded-full bg-[#7c6af7] animate-pulse" />}
+            </div>
+            <div className="flex items-center gap-1">
+              {summary && (
+                <>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(summary)}
+                    className="flex items-center gap-1 text-[10px] text-[#4a4a55] hover:text-[#a0a0aa] px-2 py-1 rounded-lg hover:bg-[#1e1e22] transition-colors"
+                    title="Copy summary"
+                  >
+                    <Copy size={11} /> Copy
+                  </button>
+                  <button
+                    onClick={() => {
+                      editor.chain().focus().insertContentAt(0, `<blockquote><strong>Summary:</strong> ${summary}</blockquote><p></p>`).run()
+                      setSummary('')
+                    }}
+                    className="flex items-center gap-1 text-[10px] text-[#7c6af7] hover:text-[#9080ff] px-2 py-1 rounded-lg hover:bg-[#7c6af7]/10 transition-colors"
+                    title="Insert at top of doc"
+                  >
+                    <ChevronsDown size={11} /> Insert
+                  </button>
+                </>
+              )}
+              <button
+                onClick={() => setSummary('')}
+                className="w-6 h-6 flex items-center justify-center rounded-lg text-[#3a3a3f] hover:text-[#6b6b75] hover:bg-[#1e1e22] transition-colors"
+              >
+                <X size={12} />
+              </button>
+            </div>
+          </div>
+          <div className="px-4 py-3 text-sm text-[#a0a0aa] leading-relaxed whitespace-pre-wrap">
+            {summary || <span className="text-[#4a4a55] italic">Generating summary…</span>}
+            {isSummarizing && summary && <span className="inline-block w-1.5 h-4 bg-[#7c6af7] ml-0.5 animate-pulse rounded-sm align-middle" />}
+          </div>
+        </div>
+      )}
+
       <EditorContent editor={editor} />
 
       {/* Voice interim transcript preview */}
@@ -354,6 +438,15 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
             {isRecording ? 'Stop' : 'Dictate'}
           </button>
         )}
+        <button
+          onClick={summarizeDoc}
+          disabled={isSummarizing || (editor?.getText().trim().length ?? 0) < 50}
+          className="flex items-center gap-1.5 text-xs bg-[#1a1a1d] border border-[#2a2a2e] text-[#7c6af7] px-3 py-1.5 rounded-full hover:bg-[#2a2a2e] transition-colors disabled:opacity-50"
+          title="Summarize this note with AI"
+        >
+          <FileText size={12} />
+          {isSummarizing ? 'Summarizing…' : 'Summarize'}
+        </button>
         <button
           onClick={triggerAI}
           disabled={isGenerating}
