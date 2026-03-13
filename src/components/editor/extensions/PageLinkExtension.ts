@@ -4,6 +4,9 @@ import { ReactRenderer } from '@tiptap/react'
 import tippy, { type Instance } from 'tippy.js'
 import PageLinkMenu from '../PageLinkMenu'
 import type { Editor } from '@tiptap/core'
+import { PluginKey } from '@tiptap/pm/state'
+
+const pageLinkPluginKey = new PluginKey('pageLink')
 
 // Module-level docs list updated by the React component
 let pagesList: { id: string; title: string }[] = []
@@ -17,6 +20,7 @@ export const PageLinkExtension = Extension.create({
     return {
       suggestion: {
         char: '@',
+        pluginKey: pageLinkPluginKey,
         command: ({ editor, range, props }: { editor: Editor; range: { from: number; to: number }; props: { id: string; title: string } }) => {
           editor.chain().focus().deleteRange(range).insertContent(
             `<a href="/docs/${props.id}">${props.title}</a>`

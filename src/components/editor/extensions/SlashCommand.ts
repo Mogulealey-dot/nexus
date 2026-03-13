@@ -4,6 +4,9 @@ import { ReactRenderer } from '@tiptap/react'
 import tippy, { type Instance } from 'tippy.js'
 import SlashCommandMenu from '../SlashCommandMenu'
 import type { Editor } from '@tiptap/core'
+import { PluginKey } from '@tiptap/pm/state'
+
+const slashCommandPluginKey = new PluginKey('slashCommand')
 
 export const SLASH_COMMANDS = [
   {
@@ -108,6 +111,7 @@ export const SlashCommand = Extension.create({
     return {
       suggestion: {
         char: '/',
+        pluginKey: slashCommandPluginKey,
         command: ({ editor, range, props }: { editor: Editor; range: { from: number; to: number }; props: { command: (editor: Editor) => void } }) => {
           editor.chain().focus().deleteRange(range).run()
           props.command(editor)
