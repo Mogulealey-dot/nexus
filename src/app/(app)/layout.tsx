@@ -1,20 +1,24 @@
 'use client'
 import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { useDocs } from '@/hooks/useDocs'
 import { useCommandPalette } from '@/hooks/useCommandPalette'
 import { useOnlineStatus } from '@/hooks/useOnlineStatus'
+import { useAppStore } from '@/store/appStore'
 import AppSidebar from '@/components/sidebar/AppSidebar'
 import CommandPalette from '@/components/command-palette/CommandPalette'
-import { WifiOff } from 'lucide-react'
+import AIChatPanel from '@/components/ai/AIChatPanel'
+import { WifiOff, Sparkles } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
+  const pathname = usePathname()
   const { user, signOut } = useAuth()
   const { tree, docs, createDoc, updateTitle, archiveDoc, toggleStar, searchDocs } = useDocs(user?.id)
   const isOnline = useOnlineStatus()
+  const { chatOpen, toggleChat } = useAppStore()
   useCommandPalette()
 
   useEffect(() => {
@@ -33,6 +37,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const handleSignOut = async () => { await signOut(); router.replace('/login') }
 
+  // Get current page title for AI context
+  const currentDocId = pathname?.split('/docs/')?.[1] || null
+  const currentPageTitle = currentDocId ? docs.find(d => d.id === currentDocId)?.title : undefined
+
   return (
     <div className="flex h-screen bg-[#0d0d0f] overflow-hidden">
       <AppSidebar
@@ -44,7 +52,28 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         onRenameDoc={updateTitle}
         onToggleStar={toggleStar}
       />
+
       <main className="flex-1 overflow-y-auto">{children}</main>
+
+      {/* AI chat panel */}
+      <AIChatPanel docs={docs} currentPageTitle={currentPageTitle} />
+
+      {/* Floating AI button */}
+      <AnimatePresence>
+        {!chatOpen && (
+          <motion.button
+            initial={{ scale: 0.8, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.8, opacity: 0 }}
+            onClick={toggleChat}
+            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-[#7c6af7] hover:bg-[#9080ff] text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg shadow-[#7c6af7]/25 transition-colors"
+          >
+            <Sparkles size={13} />
+            Ask Nexus AI
+          </motion.button>
+        )}
+      </AnimatePresence>
+
       <CommandPalette docs={docs} onCreateDoc={createDoc} onSignOut={handleSignOut} onSearch={searchDocs} />
 
       {/* Offline banner */}
