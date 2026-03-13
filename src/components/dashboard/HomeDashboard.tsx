@@ -1,9 +1,11 @@
 'use client'
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, FileText, Star, Clock, Sparkles, LayoutTemplate, ArrowRight, BookOpen } from 'lucide-react'
+import { Plus, FileText, Star, Clock, Sparkles, LayoutTemplate, ArrowRight, BookOpen, CheckSquare, Check } from 'lucide-react'
 import { useAppStore } from '@/store/appStore'
 import { TEMPLATES } from '@/lib/templates'
+import { useTasks } from '@/hooks/useTasks'
+import { cn } from '@/lib/utils'
 import type { DocMeta } from '@/types'
 import type { User } from '@supabase/supabase-js'
 
@@ -36,6 +38,7 @@ function relativeTime(dateStr: string) {
 export default function HomeDashboard({ user, docs, starred, recent, onCreateDoc }: Props) {
   const router = useRouter()
   const { setPendingTemplate, setCommandPaletteOpen } = useAppStore()
+  const { todayTasks, overdueTasks, toggleTask } = useTasks(user?.id)
   const [quickTitle, setQuickTitle] = useState('')
   const [creating, setCreating] = useState(false)
 
@@ -88,7 +91,7 @@ export default function HomeDashboard({ user, docs, starred, recent, onCreateDoc
         {[
           { icon: <FileText size={16} />, value: docs.length, label: 'Pages', color: 'text-[#7c6af7]' },
           { icon: <Star size={16} />, value: starred.length, label: 'Starred', color: 'text-[#f5a623]' },
-          { icon: <BookOpen size={16} />, value: totalWords > 0 ? totalWords.toLocaleString() : '—', label: 'Words written', color: 'text-[#34c972]' },
+          { icon: <CheckSquare size={16} />, value: todayTasks.length + overdueTasks.length, label: 'Tasks today', color: 'text-[#34c972]' },
         ].map(stat => (
           <div key={stat.label} className="bg-[#141416] border border-[#1e1e22] rounded-2xl px-5 py-4 flex items-center gap-4">
             <div className={`${stat.color} opacity-80`}>{stat.icon}</div>
@@ -124,6 +127,44 @@ export default function HomeDashboard({ user, docs, starred, recent, onCreateDoc
           </button>
         </div>
       </div>
+
+      {/* Today's tasks widget */}
+      {(todayTasks.length > 0 || overdueTasks.length > 0) && (
+        <div className="bg-[#141416] border border-[#1e1e22] rounded-2xl p-5 mb-8">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <CheckSquare size={14} className="text-[#34c972]" />
+              <span className="text-xs font-semibold text-[#6b6b75] uppercase tracking-wider">
+                Today's tasks
+              </span>
+            </div>
+            <button onClick={() => router.push('/tasks')} className="text-xs text-[#4a4a55] hover:text-[#7c6af7] transition-colors flex items-center gap-1">
+              All tasks <ArrowRight size={11} />
+            </button>
+          </div>
+          <div className="space-y-1.5">
+            {[...overdueTasks, ...todayTasks].slice(0, 5).map(task => (
+              <div key={task.id} className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-[#1a1a1d] transition-colors">
+                <button
+                  onClick={() => toggleTask(task.id)}
+                  className={cn(
+                    'w-4 h-4 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all',
+                    task.completed ? 'bg-[#34c972] border-[#34c972]' : 'border-[#3a3a3f] hover:border-[#7c6af7]'
+                  )}
+                >
+                  {task.completed && <Check size={9} className="text-white" />}
+                </button>
+                <span className={cn('text-sm flex-1 truncate', task.completed ? 'line-through text-[#4a4a55]' : 'text-[#a0a0aa]')}>
+                  {task.title}
+                </span>
+                {task.due_date && task.due_date < new Date().toISOString().split('T')[0] && (
+                  <span className="text-[10px] text-[#f56565] flex-shrink-0">overdue</span>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-5 gap-6">
         {/* Recent pages — left 3 columns */}

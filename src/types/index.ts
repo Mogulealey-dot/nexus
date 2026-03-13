@@ -24,6 +24,18 @@ export interface SlashCommandItem {
   keywords: string[]
 }
 
+export interface Task {
+  id: string
+  user_id: string
+  doc_id: string | null
+  title: string
+  completed: boolean
+  due_date: string | null
+  priority: 'low' | 'normal' | 'high'
+  created_at: string
+  updated_at: string
+}
+
 export interface CommandPaletteItem {
   id: string
   label: string

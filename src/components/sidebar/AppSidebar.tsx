@@ -1,6 +1,6 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
-import { Search, Plus, ChevronLeft, Sparkles, Star } from 'lucide-react'
+import { Search, Plus, ChevronLeft, Sparkles, Star, CheckSquare, Home } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
 import DocTreeItem from './DocTreeItem'
@@ -105,6 +105,22 @@ export default function AppSidebar({ user, tree, onSignOut, onCreateDoc, onArchi
               <span className="flex-1 text-left text-xs">Search…</span>
               <kbd className="text-xs bg-[#1e1e22] px-1.5 py-0.5 rounded text-[#4a4a55]">⌘K</kbd>
             </button>
+
+            {/* Nav links */}
+            <div className="mx-3 mb-2 space-y-0.5">
+              <button
+                onClick={() => router.push('/')}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${pathname === '/' ? 'bg-[#7c6af7]/15 text-[#e8e8ed]' : 'text-[#6b6b75] hover:bg-[#1e1e22] hover:text-[#a0a0aa]'}`}
+              >
+                <Home size={14} /> Home
+              </button>
+              <button
+                onClick={() => router.push('/tasks')}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${pathname === '/tasks' ? 'bg-[#7c6af7]/15 text-[#e8e8ed]' : 'text-[#6b6b75] hover:bg-[#1e1e22] hover:text-[#a0a0aa]'}`}
+              >
+                <CheckSquare size={14} /> Tasks
+              </button>
+            </div>
 
             {/* New doc */}
             <button
