@@ -91,6 +91,7 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
   const [ghostText, setGhostText] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
+  const [isUploadingImage, setIsUploadingImage] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const templateApplied = useRef(false)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
@@ -102,7 +103,7 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
     const ext = file.name.split('.').pop()
     const path = `${docId}/${Date.now()}.${ext}`
     const { error } = await supabase.storage.from('doc-images').upload(path, file, { upsert: true })
-    if (error) return null
+    if (error) { console.error('Image upload failed:', error.message); return null }
     const { data } = supabase.storage.from('doc-images').getPublicUrl(path)
     return data.publicUrl
   }, [docId, supabase])
@@ -112,8 +113,14 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
   const insertImage = useCallback(async (file: File) => {
     const ed = editorRef.current
     if (!ed) return
+    setIsUploadingImage(true)
     const url = await uploadImage(file)
-    if (url) ed.chain().focus().setImage({ src: url, alt: file.name }).run()
+    setIsUploadingImage(false)
+    if (url) {
+      ed.chain().focus().setImage({ src: url, alt: file.name }).run()
+    } else {
+      alert('Image upload failed — check that the doc-images bucket exists in Supabase Storage and has upload permissions.')
+    }
   }, [uploadImage])
 
   const editor = useEditor({
@@ -308,11 +315,12 @@ function EditorInner({ docId, initialTitle, ydoc }: { docId: string; initialTitl
         </div>
         <button
           onClick={() => imageInputRef.current?.click()}
-          className="flex items-center gap-1.5 text-xs bg-[#1a1a1d] border border-[#2a2a2e] text-[#6b6b75] px-3 py-1.5 rounded-full hover:bg-[#2a2a2e] hover:text-[#a0a0aa] transition-colors"
+          disabled={isUploadingImage}
+          className="flex items-center gap-1.5 text-xs bg-[#1a1a1d] border border-[#2a2a2e] text-[#6b6b75] px-3 py-1.5 rounded-full hover:bg-[#2a2a2e] hover:text-[#a0a0aa] transition-colors disabled:opacity-50"
           title="Upload image (or drag & drop)"
         >
           <ImagePlus size={12} />
-          Image
+          {isUploadingImage ? 'Uploading…' : 'Image'}
         </button>
         <button
           onClick={triggerAI}
