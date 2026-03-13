@@ -65,8 +65,9 @@ export function useDocs(userId: string | undefined) {
 
   const tree = buildTree(docs)
   const starred = docs.filter(d => d.is_starred)
+  const recent = [...docs].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()).slice(0, 8)
 
-  return { docs, tree, starred, loading, createDoc, updateTitle, archiveDoc, toggleStar, searchDocs, refetch: fetchDocs }
+  return { docs, tree, starred, recent, loading, createDoc, updateTitle, archiveDoc, toggleStar, searchDocs, refetch: fetchDocs }
 }
 
 function buildTree(docs: DocMeta[]): DocMeta[] {
