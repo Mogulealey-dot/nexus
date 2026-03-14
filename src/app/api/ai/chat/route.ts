@@ -34,13 +34,17 @@ Guidelines:
 ${currentPageTitle ? `\nThe user is currently viewing a page called: "${currentPageTitle}"` : ''}
 ${notesContext ? `\nHere is relevant context from the user's notes:\n---\n${notesContext}\n---` : '\nThe user has no notes yet, or no relevant context was found.'}`
 
-  const result = streamText({
-    model: anthropic('claude-haiku-4-5-20251001'),
-    system: systemPrompt,
-    messages,
-    maxOutputTokens: 1024,
-    temperature: 0.7,
-  })
-
-  return result.toTextStreamResponse()
+  try {
+    const result = streamText({
+      model: anthropic('claude-haiku-4-5'),
+      system: systemPrompt,
+      messages,
+      maxOutputTokens: 1024,
+      temperature: 0.7,
+    })
+    return result.toTextStreamResponse()
+  } catch (err) {
+    console.error('[/api/ai/chat]', err)
+    return new Response('AI service error', { status: 500 })
+  }
 }

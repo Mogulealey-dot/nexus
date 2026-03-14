@@ -19,9 +19,10 @@ export async function POST(request: Request) {
 
   const { prompt, context } = await request.json() as { prompt: string; context?: string }
 
-  const result = streamText({
-    model: anthropic('claude-haiku-4-5-20251001'),
-    system: `You are an intelligent writing assistant embedded in a note-taking app called Project Nexus.
+  try {
+    const result = streamText({
+      model: anthropic('claude-haiku-4-5'),
+      system: `You are an intelligent writing assistant embedded in a note-taking app called Project Nexus.
 Your job is to complete the user's thought naturally and helpfully.
 Rules:
 - Continue the text seamlessly — do NOT repeat what was already written.
@@ -29,13 +30,16 @@ Rules:
 - Match the tone and style of the existing text.
 - Do not add greetings, explanations, or meta-commentary.
 - If context is provided, use it to make smarter completions.`,
-    messages: [
-      ...(context ? [{ role: 'user' as const, content: `Context from my notes:\n${context}` }] : []),
-      { role: 'user', content: `Complete this thought naturally:\n${prompt}` },
-    ],
-    maxOutputTokens: 200,
-    temperature: 0.7,
-  })
-
-  return result.toTextStreamResponse()
+      messages: [
+        ...(context ? [{ role: 'user' as const, content: `Context from my notes:\n${context}` }] : []),
+        { role: 'user', content: `Complete this thought naturally:\n${prompt}` },
+      ],
+      maxOutputTokens: 200,
+      temperature: 0.7,
+    })
+    return result.toTextStreamResponse()
+  } catch (err) {
+    console.error('[/api/ai/complete]', err)
+    return new Response('AI service error', { status: 500 })
+  }
 }
