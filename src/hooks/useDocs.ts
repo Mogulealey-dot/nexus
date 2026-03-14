@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import type { DocMeta } from '@/types'
 
@@ -22,7 +22,7 @@ export function useDocs(userId: string | undefined) {
 
   useEffect(() => { fetchDocs() }, [fetchDocs])
 
-  const createDoc = async (parentId?: string) => {
+  const createDoc = useCallback(async (parentId?: string) => {
     if (!userId) return null
     const { data } = await supabase
       .from('docs')
@@ -31,38 +31,43 @@ export function useDocs(userId: string | undefined) {
       .single()
     await fetchDocs()
     return data?.id as string | null
-  }
+  }, [userId, supabase, fetchDocs])
 
-  const updateTitle = async (id: string, title: string) => {
+  const updateTitle = useCallback(async (id: string, title: string) => {
     await supabase.from('docs').update({ title, updated_at: new Date().toISOString() }).eq('id', id)
     setDocs(prev => prev.map(d => d.id === id ? { ...d, title } : d))
-  }
+  }, [supabase])
 
-  const archiveDoc = async (id: string) => {
+  const archiveDoc = useCallback(async (id: string) => {
     await supabase.from('docs').update({ is_archived: true }).eq('id', id)
     await fetchDocs()
-  }
+  }, [supabase, fetchDocs])
 
-  const toggleStar = async (id: string) => {
+  const toggleStar = useCallback(async (id: string) => {
     const doc = docs.find(d => d.id === id)
     if (!doc) return
     const next = !doc.is_starred
     await supabase.from('docs').update({ is_starred: next }).eq('id', id)
     setDocs(prev => prev.map(d => d.id === id ? { ...d, is_starred: next } : d))
-  }
+  }, [docs, supabase])
 
-  const searchDocs = async (query: string): Promise<DocMeta[]> => {
+  const searchDocs = useCallback(async (query: string): Promise<DocMeta[]> => {
     if (!userId || !query.trim()) return []
+
+    // Sanitize query to prevent PostgREST filter injection — commas and parens
+    // can break the .or() filter syntax and expose unintended rows
+    const safe = query.replace(/[,()]/g, '').trim()
+    if (!safe) return []
 
     // Run keyword search and semantic search in parallel
     const [keywordRes, semanticRes] = await Promise.allSettled([
-      // Keyword search
+      // Keyword search (sanitized)
       supabase
         .from('docs')
         .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, created_at, updated_at')
         .eq('user_id', userId)
         .eq('is_archived', false)
-        .or(`title.ilike.%${query}%,text_content.ilike.%${query}%`)
+        .or(`title.ilike.%${safe}%,text_content.ilike.%${safe}%`)
         .limit(10),
 
       // Semantic search — generate embedding then query match_docs RPC
@@ -70,7 +75,7 @@ export function useDocs(userId: string | undefined) {
         const resp = await fetch('/api/ai/embed', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ text: query }),
+          body: JSON.stringify({ text: safe }),
         })
         const { embedding } = await resp.json()
         if (!embedding) return { data: [] }
@@ -106,11 +111,15 @@ export function useDocs(userId: string | undefined) {
     }
 
     return results.slice(0, 15)
-  }
+  }, [userId, supabase, docs])
 
-  const tree = buildTree(docs)
-  const starred = docs.filter(d => d.is_starred)
-  const recent = [...docs].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()).slice(0, 8)
+  // Memoize derived lists so they don't recompute on every render
+  const tree = useMemo(() => buildTree(docs), [docs])
+  const starred = useMemo(() => docs.filter(d => d.is_starred), [docs])
+  const recent = useMemo(
+    () => [...docs].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()).slice(0, 8),
+    [docs]
+  )
 
   return { docs, tree, starred, recent, loading, createDoc, updateTitle, archiveDoc, toggleStar, searchDocs, refetch: fetchDocs }
 }

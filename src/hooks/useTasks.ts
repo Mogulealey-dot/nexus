@@ -1,5 +1,5 @@
 'use client'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { getSupabaseClient } from '@/lib/supabase/client'
 import type { Task } from '@/types'
 
@@ -21,7 +21,7 @@ export function useTasks(userId: string | undefined) {
 
   useEffect(() => { fetchTasks() }, [fetchTasks])
 
-  const createTask = async (title: string, dueDate?: string, priority?: Task['priority'], docId?: string) => {
+  const createTask = useCallback(async (title: string, dueDate?: string, priority?: Task['priority'], docId?: string) => {
     if (!userId) return null
     const { data } = await supabase
       .from('tasks')
@@ -30,32 +30,36 @@ export function useTasks(userId: string | undefined) {
       .single()
     await fetchTasks()
     return data as Task | null
-  }
+  }, [userId, supabase, fetchTasks])
 
-  const updateTask = async (id: string, updates: Partial<Pick<Task, 'title' | 'completed' | 'due_date' | 'priority'>>) => {
+  const updateTask = useCallback(async (id: string, updates: Partial<Pick<Task, 'title' | 'completed' | 'due_date' | 'priority'>>) => {
     await supabase.from('tasks').update({ ...updates, updated_at: new Date().toISOString() }).eq('id', id)
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t))
-  }
+  }, [supabase])
 
-  const toggleTask = async (id: string) => {
+  const toggleTask = useCallback(async (id: string) => {
     const task = tasks.find(t => t.id === id)
     if (!task) return
     await updateTask(id, { completed: !task.completed })
-  }
+  }, [tasks, updateTask])
 
-  const deleteTask = async (id: string) => {
+  const deleteTask = useCallback(async (id: string) => {
     await supabase.from('tasks').delete().eq('id', id)
     setTasks(prev => prev.filter(t => t.id !== id))
-  }
+  }, [supabase])
 
-  const today = new Date().toISOString().split('T')[0]
-  const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0]
+  // Stable date strings — recomputed once per render cycle, not per filter call
+  const today = useMemo(() => new Date().toISOString().split('T')[0], [])
+  const tomorrow = useMemo(() => new Date(Date.now() + 86400000).toISOString().split('T')[0], [])
 
-  const todayTasks = tasks.filter(t => !t.completed && t.due_date === today)
-  const upcomingTasks = tasks.filter(t => !t.completed && t.due_date && t.due_date > today)
-  const overdueTasks = tasks.filter(t => !t.completed && t.due_date && t.due_date < today)
-  const completedTasks = tasks.filter(t => t.completed)
-  const noDateTasks = tasks.filter(t => !t.completed && !t.due_date)
+  // Memoize all derived lists so they only recompute when tasks or today changes
+  const { todayTasks, upcomingTasks, overdueTasks, completedTasks, noDateTasks } = useMemo(() => ({
+    todayTasks:    tasks.filter(t => !t.completed && t.due_date === today),
+    upcomingTasks: tasks.filter(t => !t.completed && t.due_date && t.due_date > today),
+    overdueTasks:  tasks.filter(t => !t.completed && t.due_date && t.due_date < today),
+    completedTasks: tasks.filter(t => t.completed),
+    noDateTasks:   tasks.filter(t => !t.completed && !t.due_date),
+  }), [tasks, today])
 
   return {
     tasks, loading, today, tomorrow,

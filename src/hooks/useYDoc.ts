@@ -44,6 +44,7 @@ export function useYDoc(docId: string | null) {
     ydoc.on('update', syncToCloud)
 
     return () => {
+      syncToCloud.cancel() // prevent a pending debounced write from firing after unmount
       ydoc.off('update', syncToCloud)
       persistence.destroy()
       ydoc.destroy()

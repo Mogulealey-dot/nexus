@@ -6,7 +6,12 @@ import { createServerClient } from '@supabase/ssr'
 
 export async function POST(request: Request) {
   const cookieHeader = request.headers.get('cookie') || ''
-  const cookies = Object.fromEntries(cookieHeader.split(';').map(c => { const [k, ...v] = c.trim().split('='); return [k, v.join('=')] }))
+  const cookies = Object.fromEntries(
+    cookieHeader
+      .split(';')
+      .map(c => { const [k, ...v] = c.trim().split('='); return [k.trim(), v.join('=')] })
+      .filter(([k]) => k !== '') // drop blank keys from malformed cookie strings
+  )
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
