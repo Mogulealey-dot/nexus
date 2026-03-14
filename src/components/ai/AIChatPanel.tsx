@@ -23,18 +23,38 @@ const QUICK_PROMPTS = [
   'What have I been working on?',
 ]
 
-function buildNotesContext(docs: DocMeta[]): string {
+type DocWithContent = DocMeta & { text_content?: string }
+
+/**
+ * Builds a context string from the most relevant docs for the user's query.
+ * When a query is given, docs whose title or content mention any keyword are ranked
+ * first so the AI always has the most useful context — not just the first 10 docs.
+ */
+function buildNotesContext(docs: DocMeta[], query?: string): string {
   const lines: string[] = []
-  const withContent = docs.filter(d => (d as DocMeta & { text_content?: string }).text_content)
-  const subset = withContent.slice(0, 10)
-  for (const doc of subset) {
-    const text = (doc as DocMeta & { text_content?: string }).text_content || ''
-    lines.push(`Page: "${doc.title}"\n${text.slice(0, 400)}`)
+  const enriched = docs as DocWithContent[]
+  let candidates = enriched.filter(d => d.text_content)
+
+  if (query?.trim()) {
+    const keywords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2)
+    const scored = candidates.map(d => {
+      const haystack = `${d.title} ${d.text_content || ''}`.toLowerCase()
+      const score = keywords.reduce((n, kw) => n + (haystack.includes(kw) ? 1 : 0), 0)
+      return { doc: d, score }
+    })
+    scored.sort((a, b) => b.score - a.score) // relevant docs first
+    candidates = scored.map(s => s.doc)
   }
+
+  for (const doc of candidates.slice(0, 10)) {
+    lines.push(`Page: "${doc.title}"\n${(doc.text_content || '').slice(0, 400)}`)
+  }
+
   if (lines.length === 0) {
-    // Fall back to just titles
+    // Fall back to titles-only when no doc has indexed text yet
     docs.slice(0, 20).forEach(d => lines.push(`Page: "${d.title}"`))
   }
+
   return lines.join('\n\n')
 }
 
@@ -76,7 +96,7 @@ export default function AIChatPanel({ docs, currentPageTitle }: Props) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: newMessages,
-          notesContext: buildNotesContext(docs),
+          notesContext: buildNotesContext(docs, content),
           currentPageTitle,
         }),
         signal: abortRef.current.signal,

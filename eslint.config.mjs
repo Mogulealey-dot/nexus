@@ -13,6 +13,12 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
   ]),
+  {
+    rules: {
+      // Prevent <a target="_blank"> without rel="noopener noreferrer" (XSS mitigation)
+      '@next/next/no-target-blank': 'error',
+    },
+  },
 ]);
 
 export default eslintConfig;

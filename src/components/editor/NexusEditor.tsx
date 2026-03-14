@@ -29,6 +29,8 @@ import type { Editor } from '@tiptap/core'
 import { updatePagesList } from './extensions/PageLinkExtension'
 import { PageLinkExtension } from './extensions/PageLinkExtension'
 import type { DocMeta } from '@/types'
+import { usePresence } from '@/hooks/usePresence'
+import PresenceAvatars from './PresenceAvatars'
 
 const lowlight = createLowlight(common)
 
@@ -607,10 +609,21 @@ function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string
   )
 }
 
-// Outer wrapper — handles Yjs lifecycle, only renders EditorInner once ydoc is ready
-export default function NexusEditor({ docId, initialTitle, initialTags, docs }: { docId: string; initialTitle: string; initialTags?: string[]; userId: string; docs?: DocMeta[] }) {
+// Outer wrapper — handles Yjs lifecycle, presence, only renders EditorInner once ydoc is ready
+export default function NexusEditor({ docId, initialTitle, initialTags, userId, userEmail, docs }: {
+  docId: string
+  initialTitle: string
+  initialTags?: string[]
+  userId: string
+  userEmail?: string | null
+  docs?: DocMeta[]
+}) {
   const [ydoc, setYdoc] = useState<Y.Doc | null>(null)
   const supabase = getSupabaseClient()
+
+  // Real-time presence — shows who else is currently editing this document
+  const presenceUser = userId ? { id: userId, email: userEmail } : null
+  const { activeUsers } = usePresence(docId, presenceUser)
 
   useEffect(() => {
     if (docs) updatePagesList(docs.map(d => ({ id: d.id, title: d.title })))
@@ -693,5 +706,15 @@ export default function NexusEditor({ docId, initialTitle, initialTags, docs }: 
     </div>
   )
 
-  return <EditorInner docId={docId} initialTitle={initialTitle} initialTags={initialTags || []} ydoc={ydoc} />
+  return (
+    <div>
+      {/* Presence bar — only visible when collaborators are in the doc */}
+      {activeUsers.length > 0 && (
+        <div className="sticky top-0 z-30 flex items-center justify-end px-8 py-2 bg-[#0d0d0f]/80 backdrop-blur-sm border-b border-[#1e1e22]">
+          <PresenceAvatars users={activeUsers} />
+        </div>
+      )}
+      <EditorInner docId={docId} initialTitle={initialTitle} initialTags={initialTags || []} ydoc={ydoc} />
+    </div>
+  )
 }

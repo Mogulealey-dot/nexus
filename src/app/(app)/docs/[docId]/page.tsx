@@ -18,6 +18,7 @@ export default function DocPage({ params }: { params: Promise<{ docId: string }>
       initialTitle={doc?.title || 'Untitled'}
       initialTags={doc?.tags || []}
       userId={user.id}
+      userEmail={user.email}
       docs={docs}
     />
   )
