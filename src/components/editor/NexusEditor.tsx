@@ -14,10 +14,11 @@ import TextAlign from '@tiptap/extension-text-align'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import Collaboration from '@tiptap/extension-collaboration'
 import Image from '@tiptap/extension-image'
+import Mathematics from '@tiptap/extension-mathematics'
 import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff, FileText, X, Copy, ChevronsDown, History, RotateCcw, Tag, Plus, BookOpen, Edit3, BarChart2 } from 'lucide-react'
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff, FileText, X, Copy, ChevronsDown, History, RotateCcw, Tag, Plus, BookOpen, Edit3, BarChart2, Link2, List, Share2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SlashCommand } from './extensions/SlashCommand'
 import { getSupabaseClient } from '@/lib/supabase/client'
@@ -31,6 +32,7 @@ import { PageLinkExtension } from './extensions/PageLinkExtension'
 import type { DocMeta } from '@/types'
 import { usePresence } from '@/hooks/usePresence'
 import PresenceAvatars from './PresenceAvatars'
+import 'katex/dist/katex.min.css'
 
 const lowlight = createLowlight(common)
 
@@ -92,9 +94,23 @@ function SelectionToolbar({ editor }: { editor: Editor }) {
 
 const ICON_PICKER_EMOJIS = ['📄','📝','📌','⭐','🔥','💡','📊','🎯','🚀','💼','🎓','🔧','🌟','❤️','🎨','🔍','📚','💰','🌿','⚡','🏠','🎵','✅','🧠','🔬']
 
+interface TOCHeading {
+  level: number
+  text: string
+}
+
 // Inner editor — only mounts when ydoc is ready
-function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUpdateIcon }: {
-  docId: string; initialTitle: string; initialTags: string[]; initialIcon?: string | null; ydoc: Y.Doc; onUpdateIcon?: (icon: string | null) => void
+function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsPublic, initialPublicSlug, ydoc, onUpdateIcon, onTogglePublic, docs }: {
+  docId: string
+  initialTitle: string
+  initialTags: string[]
+  initialIcon?: string | null
+  initialIsPublic?: boolean
+  initialPublicSlug?: string | null
+  ydoc: Y.Doc
+  onUpdateIcon?: (icon: string | null) => void
+  onTogglePublic?: () => Promise<string | null>
+  docs?: DocMeta[]
 }) {
   const [title, setTitle] = useState(initialTitle)
   const [wordCount, setWordCount] = useState(0)
@@ -108,7 +124,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
   const templateApplied = useRef(false)
   const imageInputRef = useRef<HTMLInputElement | null>(null)
   const supabase = getSupabaseClient()
-  const { pendingTemplate, setPendingTemplate } = useAppStore()
+  const { pendingTemplate, setPendingTemplate, pendingImport, setPendingImport } = useAppStore()
   const readTime = Math.max(1, Math.ceil(wordCount / 200))
 
   const [tags, setTags] = useState<string[]>(initialTags)
@@ -124,6 +140,26 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
   const [charCount, setCharCount] = useState(0)
   const lastSnapshotRef = useRef<number>(0)
   const saveVersionRef = useRef<() => void>(() => {})
+
+  // Feature 11 — AI Auto-tag
+  const [suggestedTags, setSuggestedTags] = useState<string[]>([])
+  const [isAutoTagging, setIsAutoTagging] = useState(false)
+
+  // Feature 12 — Related Notes
+  const [showRelated, setShowRelated] = useState(false)
+  const [relatedDocs, setRelatedDocs] = useState<DocMeta[]>([])
+  const [isLoadingRelated, setIsLoadingRelated] = useState(false)
+
+  // Feature 13 — Public Share
+  const [isPublic, setIsPublic] = useState(initialIsPublic || false)
+  const [publicSlug, setPublicSlug] = useState<string | null>(initialPublicSlug || null)
+  const [showSharePanel, setShowSharePanel] = useState(false)
+  const [isToggling, setIsToggling] = useState(false)
+  const [copySuccess, setCopySuccess] = useState(false)
+
+  // Feature 15 — TOC
+  const [showTOC, setShowTOC] = useState(false)
+  const [tocHeadings, setTocHeadings] = useState<TOCHeading[]>([])
 
   const handleVoiceTranscript = useCallback((text: string) => {
     if (!editorRef.current) return
@@ -156,6 +192,39 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
     }
   }, [uploadImage])
 
+  // Extract TOC headings from editor HTML
+  const extractTOC = useCallback((editor: Editor) => {
+    const html = editor.getHTML()
+    const parser = new DOMParser()
+    const doc = parser.parseFromString(html, 'text/html')
+    const headings: TOCHeading[] = []
+    doc.querySelectorAll('h1, h2, h3').forEach(el => {
+      const level = parseInt(el.tagName[1])
+      const text = el.textContent?.trim() || ''
+      if (text) headings.push({ level, text })
+    })
+    setTocHeadings(headings)
+  }, [])
+
+  const mermaidInitialized = useRef(false)
+  const mermaidDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const runMermaid = useCallback(() => {
+    if (mermaidDebounceRef.current) clearTimeout(mermaidDebounceRef.current)
+    mermaidDebounceRef.current = setTimeout(async () => {
+      try {
+        const mermaid = (await import('mermaid')).default
+        if (!mermaidInitialized.current) {
+          mermaid.initialize({ startOnLoad: false, theme: 'dark' })
+          mermaidInitialized.current = true
+        }
+        await mermaid.run({ querySelector: '.language-mermaid' })
+      } catch {
+        // mermaid rendering errors are non-fatal
+      }
+    }, 500)
+  }, [])
+
   const editor = useEditor({
     extensions: [
       StarterKit.configure({ codeBlock: false }),
@@ -171,6 +240,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
       TextAlign.configure({ types: ['heading', 'paragraph'] }),
       CodeBlockLowlight.configure({ lowlight }),
       Image.configure({ inline: false, allowBase64: false }),
+      Mathematics,
       SlashCommand,
       PageLinkExtension,
     ],
@@ -195,12 +265,24 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
       setCharCount(editor.storage.characterCount?.characters?.() ?? 0)
       setGhostText('')
       saveVersionRef.current()
+      if (showTOC) extractTOC(editor)
+      runMermaid()
     },
     immediatelyRender: false,
   })
 
   // Keep editorRef in sync
   useEffect(() => { editorRef.current = editor }, [editor])
+
+  // Run mermaid on mount
+  useEffect(() => {
+    if (editor) runMermaid()
+  }, [editor, runMermaid])
+
+  // Extract TOC when showTOC toggled on
+  useEffect(() => {
+    if (showTOC && editor) extractTOC(editor)
+  }, [showTOC, editor, extractTOC])
 
   // Apply pending template on first load when doc is empty
   useEffect(() => {
@@ -218,6 +300,15 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
     templateApplied.current = true
     setPendingTemplate(null)
   }, [editor, pendingTemplate]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Feature 14 — Apply pending import
+  useEffect(() => {
+    if (!editor || !pendingImport || pendingImport.docId !== docId) return
+    editor.commands.setContent(pendingImport.html)
+    setTitle(pendingImport.title)
+    saveTitle(pendingImport.title)
+    setPendingImport(null)
+  }, [editor, pendingImport, docId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const saveTitle = async (t: string) => {
     setSaveStatus('saving')
@@ -302,6 +393,96 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
     }
   }, [editor, isSummarizing, title])
 
+  // Feature 11 — AI Auto-tag
+  const handleAutoTag = useCallback(async () => {
+    if (!editor || isAutoTagging) return
+    setIsAutoTagging(true)
+    setSuggestedTags([])
+    try {
+      const resp = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          messages: [{
+            role: 'user',
+            content: `Suggest 3-5 concise lowercase tags for this note. Reply with ONLY a comma-separated list of tags, nothing else.\n\nTitle: ${title}\n\n${editor.getText().slice(0, 1000)}`,
+          }],
+          currentPageTitle: title,
+        }),
+      })
+      const reader = resp.body?.getReader()
+      if (!reader) return
+      const decoder = new TextDecoder()
+      let accumulated = ''
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+        accumulated += decoder.decode(value, { stream: true })
+      }
+      const parsed = accumulated.split(',').map(t => t.trim().toLowerCase().replace(/[^a-z0-9-]/g, '')).filter(Boolean)
+      setSuggestedTags(parsed.filter(t => !tags.includes(t)))
+    } catch {
+      // silently fail
+    } finally {
+      setIsAutoTagging(false)
+    }
+  }, [editor, isAutoTagging, title, tags])
+
+  // Feature 12 — Related Notes
+  const handleRelated = useCallback(async () => {
+    if (!editor || isLoadingRelated) return
+    setShowRelated(v => !v)
+    if (showRelated) return
+    setIsLoadingRelated(true)
+    setRelatedDocs([])
+    try {
+      const text = editor.getText().trim().slice(0, 512)
+      if (text.length < 20) { setIsLoadingRelated(false); return }
+      const resp = await fetch('/api/ai/embed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      })
+      const { embedding } = await resp.json()
+      if (!embedding) return
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+      const { data } = await supabase.rpc('match_docs', {
+        query_embedding: embedding,
+        match_threshold: 0.3,
+        match_count: 8,
+        p_user_id: user.id,
+      })
+      if (data) {
+        const filtered = (data as { id: string }[])
+          .filter((r) => r.id !== docId)
+          .map((r) => docs?.find(d => d.id === r.id))
+          .filter((d): d is DocMeta => d !== undefined)
+          .slice(0, 6)
+        setRelatedDocs(filtered)
+      }
+    } catch {
+      // silently fail
+    } finally {
+      setIsLoadingRelated(false)
+    }
+  }, [editor, isLoadingRelated, showRelated, supabase, docId, docs])
+
+  // Feature 13 — Public Share
+  const handleTogglePublic = useCallback(async () => {
+    if (!onTogglePublic || isToggling) return
+    setIsToggling(true)
+    try {
+      const slug = await onTogglePublic()
+      setIsPublic(!!slug)
+      setPublicSlug(slug)
+    } finally {
+      setIsToggling(false)
+    }
+  }, [onTogglePublic, isToggling])
+
+  const publicUrl = publicSlug ? `https://mogul-notes.com/share/${publicSlug}` : null
+
   const addTag = async (tag: string) => {
     const trimmed = tag.trim().toLowerCase()
     if (!trimmed || tags.includes(trimmed)) return
@@ -380,6 +561,19 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
     return () => window.removeEventListener('keydown', handler)
   }, [ghostText, acceptGhost])
 
+  // Scroll to heading in TOC
+  const scrollToHeading = (text: string) => {
+    const editorEl = document.querySelector('.tiptap')
+    if (!editorEl) return
+    const headings = editorEl.querySelectorAll('h1, h2, h3')
+    for (const h of headings) {
+      if (h.textContent?.trim() === text) {
+        h.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        break
+      }
+    }
+  }
+
   if (!editor) return (
     <div className="flex items-center justify-center h-64">
       <div className="flex gap-1.5">
@@ -436,6 +630,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
         placeholder="Untitled"
         readOnly={isReadMode}
       />
+
       {/* Tags */}
       <div className="flex items-center flex-wrap gap-1.5 mb-6 -mt-4">
         {tags.map(tag => (
@@ -446,6 +641,25 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
             </button>
           </span>
         ))}
+
+        {/* Feature 11 — Suggested tags */}
+        {suggestedTags.map(tag => (
+          <span
+            key={`sug-${tag}`}
+            className="flex items-center gap-1 text-[11px] bg-[#34c972]/10 text-[#34c972] border border-[#34c972]/20 px-2 py-0.5 rounded-full cursor-pointer hover:bg-[#34c972]/20 transition-colors"
+            title="Click to add tag"
+            onClick={() => { addTag(tag); setSuggestedTags(prev => prev.filter(t => t !== tag)) }}
+          >
+            +{tag}
+            <button
+              onClick={e => { e.stopPropagation(); setSuggestedTags(prev => prev.filter(t => t !== tag)) }}
+              className="text-[#34c972]/60 hover:text-[#34c972] ml-0.5"
+            >
+              <X size={9} />
+            </button>
+          </span>
+        ))}
+
         {showTagInput ? (
           <input
             autoFocus
@@ -468,7 +682,17 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
             <Plus size={10} /> tag
           </button>
         )}
+        <button
+          onClick={handleAutoTag}
+          disabled={isAutoTagging}
+          className="flex items-center gap-1 text-[11px] text-[#7c6af7]/60 hover:text-[#7c6af7] transition-colors disabled:opacity-50"
+          title="AI auto-suggest tags"
+        >
+          <Sparkles size={10} />
+          {isAutoTagging ? 'Tagging…' : 'Auto-tag'}
+        </button>
       </div>
+
       {/* Summary card */}
       {(summary || isSummarizing) && (
         <div className="mb-6 bg-[#141416] border border-[#7c6af7]/25 rounded-2xl overflow-hidden">
@@ -524,6 +748,29 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
           <button onClick={() => setIsReadMode(false)} className="ml-auto text-xs text-[#7c6af7] hover:text-[#9080ff]">Exit</button>
         </div>
       )}
+
+      {/* Feature 15 — TOC Panel (left-floating) */}
+      {showTOC && tocHeadings.length > 0 && (
+        <div className="fixed left-[280px] top-20 z-40 w-56 bg-[#0d0d0f] border border-[#1e1e22] rounded-xl shadow-2xl p-3 max-h-[70vh] overflow-y-auto">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold text-[#a0a0aa]">Table of Contents</span>
+            <button onClick={() => setShowTOC(false)} className="text-[#4a4a55] hover:text-[#6b6b75]"><X size={11} /></button>
+          </div>
+          <div className="space-y-0.5">
+            {tocHeadings.map((h, i) => (
+              <button
+                key={i}
+                onClick={() => scrollToHeading(h.text)}
+                className="w-full text-left text-xs text-[#6b6b75] hover:text-[#e8e8ed] hover:bg-[#1e1e22] rounded px-2 py-1 transition-colors truncate"
+                style={{ paddingLeft: `${0.5 + (h.level - 1) * 0.75}rem` }}
+              >
+                {h.text}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <EditorContent editor={editor} />
 
       {/* Voice interim transcript preview */}
@@ -540,6 +787,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
           <span className="ml-2 text-xs text-[#3a3a3f] not-italic font-medium">Tab to accept · Esc to dismiss</span>
         </div>
       )}
+
       {/* Stats popup */}
       {showStats && (
         <div className="fixed bottom-14 right-6 z-50 bg-[#1a1a1d] border border-[#2a2a2e] rounded-xl shadow-2xl p-4 w-52">
@@ -563,11 +811,106 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
         </div>
       )}
 
-      <div className="fixed bottom-6 right-6 flex items-center gap-3">
+      {/* Feature 13 — Share Panel */}
+      {showSharePanel && (
+        <div className="fixed bottom-14 right-6 z-50 bg-[#1a1a1d] border border-[#2a2a2e] rounded-xl shadow-2xl p-4 w-72">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold text-[#e8e8ed]">Share Note</span>
+            <button onClick={() => setShowSharePanel(false)} className="text-[#4a4a55] hover:text-[#6b6b75]"><X size={12} /></button>
+          </div>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-xs text-[#a0a0aa]">{isPublic ? 'Public — anyone with the link can view' : 'Private — only you can see this'}</p>
+            </div>
+            <button
+              onClick={handleTogglePublic}
+              disabled={isToggling}
+              className={cn(
+                'relative w-10 h-5 rounded-full transition-colors flex-shrink-0',
+                isPublic ? 'bg-[#34c972]' : 'bg-[#2a2a2e]',
+                isToggling && 'opacity-50'
+              )}
+            >
+              <span className={cn(
+                'absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform',
+                isPublic ? 'translate-x-5' : 'translate-x-0.5'
+              )} />
+            </button>
+          </div>
+          {isPublic && publicUrl && (
+            <div className="space-y-2">
+              <input
+                readOnly
+                value={publicUrl}
+                className="w-full text-xs bg-[#141416] border border-[#2a2a2e] text-[#a0a0aa] px-2 py-1.5 rounded-lg outline-none"
+                onClick={e => (e.target as HTMLInputElement).select()}
+              />
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(publicUrl)
+                  setCopySuccess(true)
+                  setTimeout(() => setCopySuccess(false), 2000)
+                }}
+                className="w-full flex items-center justify-center gap-1.5 text-xs bg-[#7c6af7] hover:bg-[#9080ff] text-white px-3 py-1.5 rounded-lg transition-colors"
+              >
+                <Copy size={11} />
+                {copySuccess ? 'Copied!' : 'Copy link'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="fixed bottom-6 right-6 flex items-center gap-3 flex-wrap justify-end max-w-[calc(100vw-2rem)]">
+        {/* Feature 15 — TOC button */}
+        <button
+          onClick={() => setShowTOC(v => !v)}
+          className={cn('flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors',
+            showTOC ? 'bg-[#7c6af7]/10 border-[#7c6af7]/30 text-[#7c6af7]' : 'bg-[#1a1a1d] border-[#2a2a2e] text-[#4a4a55] hover:text-[#6b6b75] hover:bg-[#2a2a2e]'
+          )}
+          title="Table of contents"
+        >
+          <List size={12} />
+          TOC
+        </button>
+
+        {/* Feature 9 — Math button */}
+        <button
+          onClick={() => editor.chain().focus().insertContent('$$\n$$').run()}
+          className="flex items-center gap-1.5 text-xs bg-[#1a1a1d] border border-[#2a2a2e] text-[#6b6b75] px-3 py-1.5 rounded-full hover:bg-[#2a2a2e] hover:text-[#a0a0aa] transition-colors"
+          title="Insert math equation (KaTeX)"
+        >
+          <span className="text-[11px] font-mono">∑</span>
+          Math
+        </button>
+
+        {/* Feature 13 — Share button */}
+        <button
+          onClick={() => setShowSharePanel(v => !v)}
+          className={cn('flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors',
+            isPublic ? 'bg-[#34c972]/10 border-[#34c972]/30 text-[#34c972]' : 'bg-[#1a1a1d] border-[#2a2a2e] text-[#6b6b75] hover:bg-[#2a2a2e] hover:text-[#a0a0aa]'
+          )}
+          title="Share note"
+        >
+          <Share2 size={12} />
+          {isPublic ? 'Shared' : 'Share'}
+        </button>
+
+        {/* Feature 12 — Related Notes button */}
+        <button
+          onClick={handleRelated}
+          className={cn('flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors',
+            showRelated ? 'bg-[#7c6af7]/10 border-[#7c6af7]/30 text-[#7c6af7]' : 'bg-[#1a1a1d] border-[#2a2a2e] text-[#6b6b75] hover:bg-[#2a2a2e] hover:text-[#a0a0aa]'
+          )}
+          title="Find related notes"
+        >
+          <Link2 size={12} />
+          Related
+        </button>
+
         <button
           onClick={() => {
             const html = editor.getHTML()
-            // Simple HTML→Markdown conversion via blob download
             const md = html
               .replace(/<h1>(.*?)<\/h1>/g, '# $1\n')
               .replace(/<h2>(.*?)<\/h2>/g, '## $1\n')
@@ -674,6 +1017,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
           {isGenerating ? 'Writing…' : 'AI Complete'}
         </button>
       </div>
+
       {/* Version History Panel */}
       {showHistory && (
         <div className="fixed right-0 top-0 h-full w-80 bg-[#0d0d0f] border-l border-[#1e1e22] z-50 flex flex-col shadow-2xl">
@@ -708,20 +1052,65 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUp
           </div>
         </div>
       )}
+
+      {/* Feature 12 — Related Notes Panel */}
+      {showRelated && (
+        <div className="fixed right-0 top-0 h-full w-72 bg-[#0d0d0f] border-l border-[#1e1e22] z-50 flex flex-col shadow-2xl">
+          <div className="flex items-center justify-between px-4 py-4 border-b border-[#1e1e22]">
+            <div className="flex items-center gap-2">
+              <Link2 size={14} className="text-[#7c6af7]" />
+              <span className="text-sm font-semibold text-[#e8e8ed]">Related Notes</span>
+            </div>
+            <button onClick={() => setShowRelated(false)} className="w-6 h-6 flex items-center justify-center rounded-md text-[#4a4a55] hover:text-[#6b6b75] hover:bg-[#1e1e22] transition-colors">
+              <X size={13} />
+            </button>
+          </div>
+          <div className="flex-1 overflow-y-auto py-2">
+            {isLoadingRelated ? (
+              <div className="flex justify-center py-8">
+                <div className="flex gap-1">{[0,1,2].map(i=><div key={i} className="w-1.5 h-1.5 rounded-full bg-[#7c6af7] animate-bounce" style={{animationDelay:`${i*0.15}s`}}/>)}</div>
+              </div>
+            ) : relatedDocs.length === 0 ? (
+              <div className="px-4 py-8 text-center text-xs text-[#4a4a55]">No related notes found.<br/>Add more content to find semantic connections.</div>
+            ) : relatedDocs.map(doc => (
+              <button
+                key={doc.id}
+                onClick={() => { setShowRelated(false); window.location.href = `/docs/${doc.id}` }}
+                className="w-full px-4 py-3 text-left border-b border-[#1e1e22] hover:bg-[#141416] transition-colors group"
+              >
+                <div className="flex items-center gap-2">
+                  <span className="text-sm">{doc.icon || '📄'}</span>
+                  <span className="text-xs text-[#e8e8ed] truncate group-hover:text-[#7c6af7] transition-colors">{doc.title || 'Untitled'}</span>
+                </div>
+                {doc.tags && doc.tags.length > 0 && (
+                  <div className="mt-1 flex gap-1 flex-wrap">
+                    {doc.tags.slice(0, 3).map(t => (
+                      <span key={t} className="text-[9px] text-[#4a4a55] bg-[#1e1e22] px-1.5 py-0.5 rounded-full">#{t}</span>
+                    ))}
+                  </div>
+                )}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
 
 // Outer wrapper — handles Yjs lifecycle, presence, only renders EditorInner once ydoc is ready
-export default function NexusEditor({ docId, initialTitle, initialTags, initialIcon, userId, userEmail, docs, onUpdateIcon }: {
+export default function NexusEditor({ docId, initialTitle, initialTags, initialIcon, initialIsPublic, initialPublicSlug, userId, userEmail, docs, onUpdateIcon, onTogglePublic }: {
   docId: string
   initialTitle: string
   initialTags?: string[]
   initialIcon?: string | null
+  initialIsPublic?: boolean
+  initialPublicSlug?: string | null
   userId: string
   userEmail?: string | null
   docs?: DocMeta[]
   onUpdateIcon?: (icon: string | null) => void
+  onTogglePublic?: () => Promise<string | null>
 }) {
   const [ydoc, setYdoc] = useState<Y.Doc | null>(null)
   const supabase = getSupabaseClient()
@@ -757,7 +1146,6 @@ export default function NexusEditor({ docId, initialTitle, initialTags, initialI
           text: textContent,
           saved_at: new Date().toISOString(),
         }))
-        // Maintain an index of backed-up note IDs
         const indexRaw = localStorage.getItem('nexus-backup-index')
         const index: string[] = indexRaw ? JSON.parse(indexRaw) : []
         if (!index.includes(docId)) {
@@ -819,7 +1207,18 @@ export default function NexusEditor({ docId, initialTitle, initialTags, initialI
           <PresenceAvatars users={activeUsers} />
         </div>
       )}
-      <EditorInner docId={docId} initialTitle={initialTitle} initialTags={initialTags || []} initialIcon={initialIcon} ydoc={ydoc} onUpdateIcon={onUpdateIcon} />
+      <EditorInner
+        docId={docId}
+        initialTitle={initialTitle}
+        initialTags={initialTags || []}
+        initialIcon={initialIcon}
+        initialIsPublic={initialIsPublic}
+        initialPublicSlug={initialPublicSlug}
+        ydoc={ydoc}
+        onUpdateIcon={onUpdateIcon}
+        onTogglePublic={onTogglePublic}
+        docs={docs}
+      />
     </div>
   )
 }

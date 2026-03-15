@@ -26,8 +26,9 @@ export async function middleware(request: NextRequest) {
   const isAuthRoute = request.nextUrl.pathname.startsWith('/login')
   const isApiRoute = request.nextUrl.pathname.startsWith('/api')
   const isCallbackRoute = request.nextUrl.pathname.startsWith('/callback')
+  const isShareRoute = request.nextUrl.pathname.startsWith('/share')
 
-  if (!user && !isAuthRoute && !isApiRoute && !isCallbackRoute) {
+  if (!user && !isAuthRoute && !isApiRoute && !isCallbackRoute && !isShareRoute) {
     const url = request.nextUrl.clone()
     url.pathname = '/login'
     return NextResponse.redirect(url)

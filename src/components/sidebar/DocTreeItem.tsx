@@ -14,22 +14,52 @@ interface Props {
   onRename: (id: string, title: string) => void
   onToggleStar: (id: string) => void
   onDuplicate: (id: string) => void
+  onReorder?: (targetId: string, draggedId: string) => void
 }
 
-export default function DocTreeItem({ doc, activeDocId, depth, onNavigate, onCreateChild, onArchive, onRename, onToggleStar, onDuplicate }: Props) {
+export default function DocTreeItem({ doc, activeDocId, depth, onNavigate, onCreateChild, onArchive, onRename, onToggleStar, onDuplicate, onReorder }: Props) {
   const [expanded, setExpanded] = useState(true)
   const [showMenu, setShowMenu] = useState(false)
   const [editing, setEditing] = useState(false)
   const [editVal, setEditVal] = useState(doc.title)
+  const [isDragOver, setIsDragOver] = useState(false)
   const hasChildren = (doc.children?.length || 0) > 0
   const isActive = activeDocId === doc.id
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.setData('docId', doc.id)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = () => setIsDragOver(false)
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragOver(false)
+    const draggedId = e.dataTransfer.getData('docId')
+    if (draggedId && draggedId !== doc.id && onReorder) {
+      onReorder(doc.id, draggedId)
+    }
+  }
 
   return (
     <div>
       <div
+        draggable
+        onDragStart={handleDragStart}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className={cn(
           'group flex items-center gap-1 rounded-md px-2 py-1 cursor-pointer text-sm transition-colors relative',
-          isActive ? 'bg-[#7c6af7]/15 text-[#e8e8ed]' : 'text-[#8a8a94] hover:bg-[#1e1e22] hover:text-[#e8e8ed]'
+          isActive ? 'bg-[#7c6af7]/15 text-[#e8e8ed]' : 'text-[#8a8a94] hover:bg-[#1e1e22] hover:text-[#e8e8ed]',
+          isDragOver && 'bg-[#7c6af7]/20 border border-[#7c6af7]/40'
         )}
         style={{ paddingLeft: `${0.5 + depth * 1}rem` }}
         onClick={() => onNavigate(doc.id)}
@@ -105,7 +135,8 @@ export default function DocTreeItem({ doc, activeDocId, depth, onNavigate, onCre
           {doc.children!.map(child => (
             <DocTreeItem key={child.id} doc={child} activeDocId={activeDocId} depth={depth + 1}
               onNavigate={onNavigate} onCreateChild={onCreateChild} onArchive={onArchive}
-              onRename={onRename} onToggleStar={onToggleStar} onDuplicate={onDuplicate} />
+              onRename={onRename} onToggleStar={onToggleStar} onDuplicate={onDuplicate}
+              onReorder={onReorder} />
           ))}
         </div>
       )}

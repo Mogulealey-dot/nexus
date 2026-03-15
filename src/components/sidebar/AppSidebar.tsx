@@ -1,7 +1,7 @@
 'use client'
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { Search, Plus, ChevronLeft, Sparkles, Star, CheckSquare, Home, Trash2, RotateCcw, X, ChevronDown } from 'lucide-react'
+import { Search, Plus, ChevronLeft, Sparkles, Star, CheckSquare, Home, Trash2, RotateCcw, X, ChevronDown, Calendar, Network, Upload } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
 import DocTreeItem from './DocTreeItem'
@@ -12,6 +12,7 @@ import type { User } from '@supabase/supabase-js'
 interface Props {
   user: User
   tree: DocMeta[]
+  docs: DocMeta[]
   archivedDocs: DocMeta[]
   onSignOut: () => void
   onCreateDoc: (parentId?: string) => Promise<string | null>
@@ -22,14 +23,17 @@ interface Props {
   onToggleStar: (id: string) => Promise<void>
   onDuplicateDoc: (id: string) => Promise<string | null>
   onFetchArchived: () => Promise<void>
+  onTodayNote: () => Promise<void>
+  onReorderDoc: (id: string, newPosition: number) => Promise<void>
 }
 
-export default function AppSidebar({ user, tree, archivedDocs, onSignOut, onCreateDoc, onArchiveDoc, onRestoreDoc, onDeleteDoc, onRenameDoc, onToggleStar, onDuplicateDoc, onFetchArchived }: Props) {
+export default function AppSidebar({ user, tree, docs, archivedDocs, onSignOut, onCreateDoc, onArchiveDoc, onRestoreDoc, onDeleteDoc, onRenameDoc, onToggleStar, onDuplicateDoc, onFetchArchived, onTodayNote, onReorderDoc }: Props) {
   const router = useRouter()
   const pathname = usePathname()
-  const { sidebarOpen, toggleSidebar, setCommandPaletteOpen } = useAppStore()
+  const { sidebarOpen, toggleSidebar, setCommandPaletteOpen, setGraphOpen, setPendingImport } = useAppStore()
   const activeDocId = pathname?.split('/docs/')?.[1] || null
   const [trashOpen, setTrashOpen] = useState(false)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   const handleCreate = async (parentId?: string) => {
     const id = await onCreateDoc(parentId)
@@ -48,6 +52,48 @@ export default function AppSidebar({ user, tree, archivedDocs, onSignOut, onCrea
     setTrashOpen(v => !v)
   }
 
+  // Drag-and-drop reorder: swap positions of two docs
+  const handleReorder = async (targetId: string, draggedId: string) => {
+    const allDocs: DocMeta[] = []
+    const flatten = (nodes: DocMeta[]) => nodes.forEach(n => { allDocs.push(n); if (n.children) flatten(n.children) })
+    flatten(tree)
+
+    const dragged = allDocs.find(d => d.id === draggedId)
+    const target = allDocs.find(d => d.id === targetId)
+    if (!dragged || !target) return
+
+    const draggedPos = dragged.position ?? allDocs.indexOf(dragged)
+    const targetPos = target.position ?? allDocs.indexOf(target)
+
+    await Promise.all([
+      onReorderDoc(draggedId, targetPos),
+      onReorderDoc(targetId, draggedPos),
+    ])
+  }
+
+  // Import .md file handler
+  const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+
+    const text = await file.text()
+    // Dynamically import marked to avoid SSR issues
+    const { marked } = await import('marked')
+    const html = await marked.parse(text)
+
+    // Extract title from first # heading or use filename
+    const headingMatch = text.match(/^#\s+(.+)/m)
+    const title = headingMatch ? headingMatch[1].trim() : file.name.replace(/\.(md|txt)$/i, '')
+
+    const id = await onCreateDoc()
+    if (!id) return
+
+    // Set pending import in store — NexusEditor will pick it up
+    setPendingImport({ docId: id, html: html as string, title })
+    router.push(`/docs/${id}`)
+  }
+
   const allDocs: DocMeta[] = []
   const flatten = (nodes: DocMeta[]) => nodes.forEach(n => { allDocs.push(n); if (n.children) flatten(n.children) })
   flatten(tree)
@@ -61,6 +107,7 @@ export default function AppSidebar({ user, tree, archivedDocs, onSignOut, onCrea
     onRename: onRenameDoc,
     onToggleStar,
     onDuplicate: handleDuplicate,
+    onReorder: handleReorder,
   }
 
   return (
@@ -139,14 +186,44 @@ export default function AppSidebar({ user, tree, archivedDocs, onSignOut, onCrea
               </button>
             </div>
 
-            {/* New doc */}
-            <button
-              onClick={() => handleCreate()}
-              className="mx-3 mb-3 flex items-center gap-2 px-3 py-1.5 rounded-lg text-[#7c6af7] text-sm hover:bg-[#7c6af7]/10 transition-colors"
-            >
-              <Plus size={14} />
-              New Page
-            </button>
+            {/* New doc + Today + Graph + Import */}
+            <div className="mx-3 mb-3 space-y-0.5">
+              <button
+                onClick={() => handleCreate()}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-[#7c6af7] text-sm hover:bg-[#7c6af7]/10 transition-colors"
+              >
+                <Plus size={14} />
+                New Page
+              </button>
+              <button
+                onClick={onTodayNote}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-[#6b6b75] text-sm hover:bg-[#1e1e22] hover:text-[#a0a0aa] transition-colors"
+              >
+                <Calendar size={14} />
+                Today
+              </button>
+              <button
+                onClick={() => setGraphOpen(true)}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-[#6b6b75] text-sm hover:bg-[#1e1e22] hover:text-[#a0a0aa] transition-colors"
+              >
+                <Network size={14} />
+                Graph
+              </button>
+              <button
+                onClick={() => importInputRef.current?.click()}
+                className="w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-[#6b6b75] text-sm hover:bg-[#1e1e22] hover:text-[#a0a0aa] transition-colors"
+              >
+                <Upload size={14} />
+                Import .md
+              </button>
+              <input
+                ref={importInputRef}
+                type="file"
+                accept=".md,.txt"
+                className="hidden"
+                onChange={handleImportFile}
+              />
+            </div>
 
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">

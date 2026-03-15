@@ -1,5 +1,6 @@
 'use client'
 import { create } from 'zustand'
+import type { PendingImport } from '@/types'
 
 interface AppStore {
   sidebarOpen: boolean
@@ -8,6 +9,8 @@ interface AppStore {
   shortcutsOpen: boolean
   activeDocId: string | null
   pendingTemplate: string | null
+  graphOpen: boolean
+  pendingImport: PendingImport | null
   setSidebarOpen: (open: boolean) => void
   toggleSidebar: () => void
   setCommandPaletteOpen: (open: boolean) => void
@@ -17,6 +20,8 @@ interface AppStore {
   toggleShortcuts: () => void
   setActiveDocId: (id: string | null) => void
   setPendingTemplate: (id: string | null) => void
+  setGraphOpen: (v: boolean) => void
+  setPendingImport: (v: PendingImport | null) => void
 }
 
 export const useAppStore = create<AppStore>((set) => ({
@@ -26,6 +31,8 @@ export const useAppStore = create<AppStore>((set) => ({
   shortcutsOpen: false,
   activeDocId: null,
   pendingTemplate: null,
+  graphOpen: false,
+  pendingImport: null,
   setSidebarOpen: (open) => set({ sidebarOpen: open }),
   toggleSidebar: () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),
@@ -35,4 +42,6 @@ export const useAppStore = create<AppStore>((set) => ({
   toggleShortcuts: () => set((s) => ({ shortcutsOpen: !s.shortcutsOpen })),
   setActiveDocId: (id) => set({ activeDocId: id }),
   setPendingTemplate: (id) => set({ pendingTemplate: id }),
+  setGraphOpen: (v) => set({ graphOpen: v }),
+  setPendingImport: (v) => set({ pendingImport: v }),
 }))

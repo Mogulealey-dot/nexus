@@ -13,7 +13,7 @@ export function useDocs(userId: string | undefined) {
     if (!userId) { setLoading(false); return }
     const { data } = await supabase
       .from('docs')
-      .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, created_at, updated_at')
+      .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, position, is_public, public_slug, created_at, updated_at')
       .eq('user_id', userId)
       .eq('is_archived', false)
       .order('created_at', { ascending: true })
@@ -25,7 +25,7 @@ export function useDocs(userId: string | undefined) {
     if (!userId) return
     const { data } = await supabase
       .from('docs')
-      .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, created_at, updated_at')
+      .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, position, is_public, public_slug, created_at, updated_at')
       .eq('user_id', userId)
       .eq('is_archived', true)
       .order('updated_at', { ascending: false })
@@ -113,7 +113,7 @@ export function useDocs(userId: string | undefined) {
     const [keywordRes, semanticRes] = await Promise.allSettled([
       supabase
         .from('docs')
-        .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, created_at, updated_at')
+        .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, position, is_public, public_slug, created_at, updated_at')
         .eq('user_id', userId)
         .eq('is_archived', false)
         .or(`title.ilike.%${safe}%,text_content.ilike.%${safe}%`)
@@ -154,7 +154,38 @@ export function useDocs(userId: string | undefined) {
     return results.slice(0, 15)
   }, [userId, supabase, docs])
 
-  const tree = useMemo(() => buildTree(docs), [docs])
+  const reorderDoc = useCallback(async (id: string, newPosition: number) => {
+    await supabase.from('docs').update({ position: newPosition }).eq('id', id)
+    setDocs(prev => prev.map(d => d.id === id ? { ...d, position: newPosition } : d))
+  }, [supabase])
+
+  const togglePublic = useCallback(async (id: string): Promise<string | null> => {
+    const doc = docs.find(d => d.id === id)
+    if (!doc) return null
+    if (!doc.is_public) {
+      const slug = `${id.slice(0, 8)}-${Date.now().toString(36)}`
+      await supabase.from('docs').update({ is_public: true, public_slug: slug }).eq('id', id)
+      setDocs(prev => prev.map(d => d.id === id ? { ...d, is_public: true, public_slug: slug } : d))
+      return slug
+    } else {
+      await supabase.from('docs').update({ is_public: false, public_slug: null }).eq('id', id)
+      setDocs(prev => prev.map(d => d.id === id ? { ...d, is_public: false, public_slug: null } : d))
+      return null
+    }
+  }, [docs, supabase])
+
+  const sortedDocs = useMemo(() => {
+    return [...docs].sort((a, b) => {
+      const ap = a.position ?? null
+      const bp = b.position ?? null
+      if (ap !== null && bp !== null) return ap - bp
+      if (ap !== null) return -1
+      if (bp !== null) return 1
+      return new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
+    })
+  }, [docs])
+
+  const tree = useMemo(() => buildTree(sortedDocs), [sortedDocs])
   const starred = useMemo(() => docs.filter(d => d.is_starred), [docs])
   const recent = useMemo(
     () => [...docs].sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()).slice(0, 8),
@@ -165,6 +196,7 @@ export function useDocs(userId: string | undefined) {
     docs, tree, starred, recent, archivedDocs, loading,
     createDoc, updateTitle, updateIcon, archiveDoc, restoreDoc, deleteDoc,
     duplicateDoc, toggleStar, searchDocs, refetch: fetchDocs, fetchArchived,
+    reorderDoc, togglePublic,
   }
 }
 

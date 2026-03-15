@@ -80,6 +80,20 @@ export const SLASH_COMMANDS = [
     command: (editor: Editor) => editor.chain().focus().setHorizontalRule().run(),
   },
   {
+    title: 'Math Block',
+    description: 'Insert a KaTeX math equation',
+    icon: '∑',
+    keywords: ['math', 'katex', 'equation', 'latex', 'formula'],
+    command: (editor: Editor) => editor.chain().focus().insertContent('$$\n$$').run(),
+  },
+  {
+    title: 'Mermaid Diagram',
+    description: 'Insert a Mermaid flowchart or diagram',
+    icon: '⬡',
+    keywords: ['mermaid', 'diagram', 'flowchart', 'graph'],
+    command: (editor: Editor) => editor.chain().focus().insertContent('```mermaid\ngraph TD\n  A --> B\n```').run(),
+  },
+  {
     title: 'Clip from URL',
     description: 'Import content from a web page',
     icon: '↓',

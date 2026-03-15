@@ -10,6 +10,7 @@ import AppSidebar from '@/components/sidebar/AppSidebar'
 import CommandPalette from '@/components/command-palette/CommandPalette'
 import AIChatPanel from '@/components/ai/AIChatPanel'
 import ShortcutsModal from '@/components/ShortcutsModal'
+import KnowledgeGraph from '@/components/KnowledgeGraph'
 import { WifiOff, Sparkles } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 
@@ -21,9 +22,10 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     tree, docs, archivedDocs,
     createDoc, updateTitle, archiveDoc, restoreDoc, deleteDoc,
     duplicateDoc, toggleStar, searchDocs, refetch, fetchArchived,
+    reorderDoc,
   } = useDocs(user?.id)
   const isOnline = useOnlineStatus()
-  const { chatOpen, toggleChat, shortcutsOpen, setShortcutsOpen, toggleShortcuts } = useAppStore()
+  const { chatOpen, toggleChat, shortcutsOpen, setShortcutsOpen, toggleShortcuts, graphOpen, setGraphOpen } = useAppStore()
   useCommandPalette()
 
   // Listen for doc updates from editor (e.g. icon changes) and refresh
@@ -63,11 +65,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const currentDocId = pathname?.split('/docs/')?.[1] || null
   const currentPageTitle = currentDocId ? docs.find(d => d.id === currentDocId)?.title : undefined
 
+  // Feature 1 — Daily Notes
+  const handleTodayNote = async () => {
+    const todayTitle = 'Daily — ' + new Date().toLocaleDateString('en-GB', {
+      weekday: 'short',
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric',
+    })
+    const found = docs.find(d => d.title === todayTitle)
+    if (found) {
+      router.push(`/docs/${found.id}`)
+    } else {
+      const id = await createDoc()
+      if (id) {
+        await updateTitle(id, todayTitle)
+        router.push(`/docs/${id}`)
+      }
+    }
+  }
+
   return (
     <div className="flex h-screen bg-[#0d0d0f] overflow-hidden">
       <AppSidebar
         user={user}
         tree={tree}
+        docs={docs}
         archivedDocs={archivedDocs}
         onSignOut={handleSignOut}
         onCreateDoc={createDoc}
@@ -78,11 +101,18 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         onToggleStar={toggleStar}
         onDuplicateDoc={duplicateDoc}
         onFetchArchived={fetchArchived}
+        onTodayNote={handleTodayNote}
+        onReorderDoc={reorderDoc}
       />
 
       <main className="flex-1 overflow-y-auto">{children}</main>
 
       <AIChatPanel docs={docs} currentPageTitle={currentPageTitle} />
+
+      {/* Feature 2 — Knowledge Graph */}
+      {graphOpen && (
+        <KnowledgeGraph docs={docs} onClose={() => setGraphOpen(false)} />
+      )}
 
       <AnimatePresence>
         {!chatOpen && (
@@ -113,7 +143,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             className="fixed bottom-4 left-1/2 -translate-x-1/2 z-[100] flex items-center gap-2 bg-[#1a1a1d] border border-[#f5a623]/30 text-[#f5a623] text-xs px-4 py-2.5 rounded-full shadow-2xl"
           >
             <WifiOff size={13} />
-            You're offline — changes are saved locally and will sync when reconnected
+            You&apos;re offline — changes are saved locally and will sync when reconnected
           </motion.div>
         )}
       </AnimatePresence>

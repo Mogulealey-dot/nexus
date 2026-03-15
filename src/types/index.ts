@@ -8,12 +8,21 @@ export interface Doc {
   is_archived: boolean
   is_starred: boolean
   tags: string[]
+  position?: number | null
+  is_public?: boolean
+  public_slug?: string | null
   created_at: string
   updated_at: string
 }
 
 export interface DocMeta extends Omit<Doc, 'content'> {
   children?: DocMeta[]
+}
+
+export interface PendingImport {
+  docId: string
+  html: string
+  title: string
 }
 
 export interface SlashCommandItem {
