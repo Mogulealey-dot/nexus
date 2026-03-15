@@ -8,6 +8,9 @@ export const metadata: Metadata = {
   title: 'Nexus — AI Notes',
   description: 'Local-first, AI-native note-taking app powered by Claude AI.',
   manifest: '/manifest.json',
+  icons: {
+    icon: '/favicon.svg',
+  },
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
