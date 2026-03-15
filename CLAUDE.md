@@ -30,7 +30,51 @@ alter table docs enable row level security;
 create policy "Users own their docs" on docs for all using (auth.uid() = user_id);
 ```
 
-3. Enable Auth providers in Supabase: Email/Password + Google
+3. Run this SQL to create the tasks table:
+
+```sql
+create table tasks (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid references auth.users not null,
+  doc_id     uuid references docs(id) on delete set null,
+  title      text not null,
+  completed  boolean default false,
+  due_date   date,
+  priority   text default 'normal' check (priority in ('low', 'normal', 'high')),
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
+alter table tasks enable row level security;
+create policy "Users own their tasks" on tasks for all using (auth.uid() = user_id);
+```
+
+4. Run this SQL to create the doc_versions table (version history):
+
+```sql
+create table doc_versions (
+  id           uuid primary key default gen_random_uuid(),
+  doc_id       uuid references docs(id) on delete cascade not null,
+  user_id      uuid references auth.users not null,
+  content_html text,
+  text_content text,
+  created_at   timestamptz default now()
+);
+
+alter table doc_versions enable row level security;
+create policy "Users own their versions" on doc_versions for all using (auth.uid() = user_id);
+```
+
+5. Also add missing columns to docs table (run if upgrading from initial setup):
+
+```sql
+alter table docs add column if not exists is_starred boolean default false;
+alter table docs add column if not exists tags text[] default '{}';
+alter table docs add column if not exists text_content text;
+alter table docs add column if not exists embedding vector(384);
+```
+
+6. Enable Auth providers in Supabase: Email/Password + Google
 4. Set Google OAuth redirect URL to `http://localhost:3000/callback` (dev) and your deployed URL
 
 ## Architecture
