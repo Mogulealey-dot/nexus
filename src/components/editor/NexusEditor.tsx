@@ -17,7 +17,7 @@ import Image from '@tiptap/extension-image'
 import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff, FileText, X, Copy, ChevronsDown, History, RotateCcw, Tag, Plus } from 'lucide-react'
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff, FileText, X, Copy, ChevronsDown, History, RotateCcw, Tag, Plus, BookOpen, Edit3, BarChart2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SlashCommand } from './extensions/SlashCommand'
 import { getSupabaseClient } from '@/lib/supabase/client'
@@ -90,8 +90,12 @@ function SelectionToolbar({ editor }: { editor: Editor }) {
   )
 }
 
+const ICON_PICKER_EMOJIS = ['📄','📝','📌','⭐','🔥','💡','📊','🎯','🚀','💼','🎓','🔧','🌟','❤️','🎨','🔍','📚','💰','🌿','⚡','🏠','🎵','✅','🧠','🔬']
+
 // Inner editor — only mounts when ydoc is ready
-function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string; initialTitle: string; initialTags: string[]; ydoc: Y.Doc }) {
+function EditorInner({ docId, initialTitle, initialTags, initialIcon, ydoc, onUpdateIcon }: {
+  docId: string; initialTitle: string; initialTags: string[]; initialIcon?: string | null; ydoc: Y.Doc; onUpdateIcon?: (icon: string | null) => void
+}) {
   const [title, setTitle] = useState(initialTitle)
   const [wordCount, setWordCount] = useState(0)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving' | 'unsaved'>('saved')
@@ -113,6 +117,11 @@ function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string
   const [versions, setVersions] = useState<{ id: string; created_at: string; content_html: string }[]>([])
   const [showHistory, setShowHistory] = useState(false)
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [isReadMode, setIsReadMode] = useState(false)
+  const [showStats, setShowStats] = useState(false)
+  const [docIcon, setDocIcon] = useState<string | null>(initialIcon || null)
+  const [showIconPicker, setShowIconPicker] = useState(false)
+  const [charCount, setCharCount] = useState(0)
   const lastSnapshotRef = useRef<number>(0)
   const saveVersionRef = useRef<() => void>(() => {})
 
@@ -183,6 +192,7 @@ function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string
     },
     onUpdate: ({ editor }) => {
       setWordCount(editor.storage.characterCount?.words?.() ?? 0)
+      setCharCount(editor.storage.characterCount?.characters?.() ?? 0)
       setGhostText('')
       saveVersionRef.current()
     },
@@ -329,6 +339,20 @@ function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string
   // Keep saveVersionRef pointing at the latest saveVersion
   useEffect(() => { saveVersionRef.current = saveVersion }, [saveVersion])
 
+  // Sync editor editability with read mode
+  useEffect(() => {
+    if (!editor) return
+    editor.setEditable(!isReadMode)
+  }, [editor, isReadMode])
+
+  const handleSetIcon = async (emoji: string | null) => {
+    setDocIcon(emoji)
+    setShowIconPicker(false)
+    if (onUpdateIcon) onUpdateIcon(emoji)
+  }
+
+  const paragraphCount = editor ? (editor.getHTML().match(/<p/g) || []).length : 0
+
   const loadVersions = async () => {
     setHistoryLoading(true)
     const { data } = await supabase
@@ -374,13 +398,43 @@ function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string
         onChange={e => { const f = e.target.files?.[0]; if (f) insertImage(f); e.target.value = '' }}
       />
       <SelectionToolbar editor={editor} />
+
+      {/* Icon picker */}
+      <div className="relative mb-3">
+        <button
+          onClick={() => setShowIconPicker(v => !v)}
+          className="text-3xl hover:bg-[#1e1e22] rounded-lg p-1 transition-colors"
+          title="Set page icon"
+        >
+          {docIcon || '📄'}
+        </button>
+        {showIconPicker && (
+          <div className="absolute top-full left-0 mt-1 z-50 bg-[#1a1a1d] border border-[#2a2a2e] rounded-xl shadow-2xl p-3 w-52">
+            <div className="grid grid-cols-5 gap-1 mb-2">
+              {ICON_PICKER_EMOJIS.map(e => (
+                <button key={e} onClick={() => handleSetIcon(e)}
+                  className={cn('text-xl p-1.5 rounded-lg hover:bg-[#2a2a2e] transition-colors', docIcon === e && 'bg-[#7c6af7]/20')}
+                >{e}</button>
+              ))}
+            </div>
+            <button onClick={() => handleSetIcon(null)}
+              className="w-full text-xs text-[#4a4a55] hover:text-[#6b6b75] py-1 border-t border-[#2a2a2e] mt-1 transition-colors"
+            >Remove icon</button>
+          </div>
+        )}
+      </div>
+
       <input
-        className="w-full text-4xl font-bold bg-transparent border-none outline-none text-[#e8e8ed] placeholder-[#3a3a3f] mb-8 tracking-tight"
+        className={cn(
+          'w-full text-4xl font-bold bg-transparent border-none outline-none text-[#e8e8ed] placeholder-[#3a3a3f] mb-8 tracking-tight',
+          isReadMode && 'pointer-events-none'
+        )}
         value={title}
         onChange={e => handleTitleChange(e.target.value)}
         onBlur={e => saveTitle(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); saveTitle(title); (e.target as HTMLInputElement).blur() } }}
         placeholder="Untitled"
+        readOnly={isReadMode}
       />
       {/* Tags */}
       <div className="flex items-center flex-wrap gap-1.5 mb-6 -mt-4">
@@ -463,6 +517,13 @@ function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string
         </div>
       )}
 
+      {isReadMode && (
+        <div className="mb-4 flex items-center gap-2 px-3 py-2 bg-[#7c6af7]/10 border border-[#7c6af7]/20 rounded-lg">
+          <BookOpen size={13} className="text-[#7c6af7]" />
+          <span className="text-xs text-[#7c6af7]">Reading mode — editing disabled</span>
+          <button onClick={() => setIsReadMode(false)} className="ml-auto text-xs text-[#7c6af7] hover:text-[#9080ff]">Exit</button>
+        </div>
+      )}
       <EditorContent editor={editor} />
 
       {/* Voice interim transcript preview */}
@@ -479,6 +540,29 @@ function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string
           <span className="ml-2 text-xs text-[#3a3a3f] not-italic font-medium">Tab to accept · Esc to dismiss</span>
         </div>
       )}
+      {/* Stats popup */}
+      {showStats && (
+        <div className="fixed bottom-14 right-6 z-50 bg-[#1a1a1d] border border-[#2a2a2e] rounded-xl shadow-2xl p-4 w-52">
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-xs font-semibold text-[#e8e8ed]">Note Stats</span>
+            <button onClick={() => setShowStats(false)} className="text-[#4a4a55] hover:text-[#6b6b75]"><X size={12} /></button>
+          </div>
+          <div className="space-y-2">
+            {[
+              { label: 'Words', value: wordCount },
+              { label: 'Characters', value: charCount },
+              { label: 'Paragraphs', value: paragraphCount },
+              { label: 'Read time', value: `${readTime} min` },
+            ].map(s => (
+              <div key={s.label} className="flex items-center justify-between">
+                <span className="text-xs text-[#6b6b75]">{s.label}</span>
+                <span className="text-xs font-semibold text-[#e8e8ed]">{s.value}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="fixed bottom-6 right-6 flex items-center gap-3">
         <button
           onClick={() => {
@@ -510,7 +594,26 @@ function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string
           <Download size={12} />
           Export
         </button>
-        <div className="text-xs text-[#4a4a55]">{wordCount} words · {readTime} min read</div>
+        <button
+          onClick={() => setShowStats(v => !v)}
+          className={cn('flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors',
+            showStats ? 'bg-[#7c6af7]/10 border-[#7c6af7]/30 text-[#7c6af7]' : 'bg-[#1a1a1d] border-[#2a2a2e] text-[#4a4a55] hover:text-[#6b6b75] hover:bg-[#2a2a2e]'
+          )}
+          title="Note statistics"
+        >
+          <BarChart2 size={12} />
+          {wordCount} words
+        </button>
+        <button
+          onClick={() => setIsReadMode(v => !v)}
+          className={cn('flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors',
+            isReadMode ? 'bg-[#7c6af7]/10 border-[#7c6af7]/30 text-[#7c6af7]' : 'bg-[#1a1a1d] border-[#2a2a2e] text-[#6b6b75] hover:bg-[#2a2a2e] hover:text-[#a0a0aa]'
+          )}
+          title="Toggle reading mode"
+        >
+          {isReadMode ? <Edit3 size={12} /> : <BookOpen size={12} />}
+          {isReadMode ? 'Edit' : 'Read'}
+        </button>
         <div className={cn(
           'flex items-center gap-1.5 text-xs transition-colors',
           saveStatus === 'saved' ? 'text-[#34c972]' : saveStatus === 'saving' ? 'text-[#f5a623]' : 'text-[#4a4a55]'
@@ -610,13 +713,15 @@ function EditorInner({ docId, initialTitle, initialTags, ydoc }: { docId: string
 }
 
 // Outer wrapper — handles Yjs lifecycle, presence, only renders EditorInner once ydoc is ready
-export default function NexusEditor({ docId, initialTitle, initialTags, userId, userEmail, docs }: {
+export default function NexusEditor({ docId, initialTitle, initialTags, initialIcon, userId, userEmail, docs, onUpdateIcon }: {
   docId: string
   initialTitle: string
   initialTags?: string[]
+  initialIcon?: string | null
   userId: string
   userEmail?: string | null
   docs?: DocMeta[]
+  onUpdateIcon?: (icon: string | null) => void
 }) {
   const [ydoc, setYdoc] = useState<Y.Doc | null>(null)
   const supabase = getSupabaseClient()
@@ -714,7 +819,7 @@ export default function NexusEditor({ docId, initialTitle, initialTags, userId, 
           <PresenceAvatars users={activeUsers} />
         </div>
       )}
-      <EditorInner docId={docId} initialTitle={initialTitle} initialTags={initialTags || []} ydoc={ydoc} />
+      <EditorInner docId={docId} initialTitle={initialTitle} initialTags={initialTags || []} initialIcon={initialIcon} ydoc={ydoc} onUpdateIcon={onUpdateIcon} />
     </div>
   )
 }

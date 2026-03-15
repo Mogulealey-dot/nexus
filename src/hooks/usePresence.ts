@@ -44,7 +44,7 @@ export function usePresence(
 
     channel
       .on('presence', { event: 'sync' }, () => {
-        const state = channel.presenceState<PresenceUser>()
+        const state = channel.presenceState() as Record<string, PresenceUser[]>
         // Flatten presence state — each key maps to an array (handles multi-tab)
         const others: PresenceUser[] = []
         for (const [key, presences] of Object.entries(state)) {
@@ -54,7 +54,7 @@ export function usePresence(
         }
         setActiveUsers(others)
       })
-      .subscribe(async (status) => {
+      .subscribe(async (status: string) => {
         if (status === 'SUBSCRIBED') {
           await channel.track(myPresence)
         }

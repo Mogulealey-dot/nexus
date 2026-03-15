@@ -1,6 +1,7 @@
 'use client'
+import { useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { Search, Plus, ChevronLeft, Sparkles, Star, CheckSquare, Home } from 'lucide-react'
+import { Search, Plus, ChevronLeft, Sparkles, Star, CheckSquare, Home, Trash2, RotateCcw, X, ChevronDown } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
 import DocTreeItem from './DocTreeItem'
@@ -11,18 +12,24 @@ import type { User } from '@supabase/supabase-js'
 interface Props {
   user: User
   tree: DocMeta[]
+  archivedDocs: DocMeta[]
   onSignOut: () => void
   onCreateDoc: (parentId?: string) => Promise<string | null>
   onArchiveDoc: (id: string) => Promise<void>
+  onRestoreDoc: (id: string) => Promise<void>
+  onDeleteDoc: (id: string) => Promise<void>
   onRenameDoc: (id: string, title: string) => Promise<void>
   onToggleStar: (id: string) => Promise<void>
+  onDuplicateDoc: (id: string) => Promise<string | null>
+  onFetchArchived: () => Promise<void>
 }
 
-export default function AppSidebar({ user, tree, onSignOut, onCreateDoc, onArchiveDoc, onRenameDoc, onToggleStar }: Props) {
+export default function AppSidebar({ user, tree, archivedDocs, onSignOut, onCreateDoc, onArchiveDoc, onRestoreDoc, onDeleteDoc, onRenameDoc, onToggleStar, onDuplicateDoc, onFetchArchived }: Props) {
   const router = useRouter()
   const pathname = usePathname()
   const { sidebarOpen, toggleSidebar, setCommandPaletteOpen } = useAppStore()
   const activeDocId = pathname?.split('/docs/')?.[1] || null
+  const [trashOpen, setTrashOpen] = useState(false)
 
   const handleCreate = async (parentId?: string) => {
     const id = await onCreateDoc(parentId)
@@ -31,7 +38,16 @@ export default function AppSidebar({ user, tree, onSignOut, onCreateDoc, onArchi
 
   const handleNavigate = (id: string) => router.push(`/docs/${id}`)
 
-  // Flatten tree to find starred docs
+  const handleDuplicate = async (id: string) => {
+    const newId = await onDuplicateDoc(id)
+    if (newId) router.push(`/docs/${newId}`)
+  }
+
+  const handleTrashToggle = () => {
+    if (!trashOpen) onFetchArchived()
+    setTrashOpen(v => !v)
+  }
+
   const allDocs: DocMeta[] = []
   const flatten = (nodes: DocMeta[]) => nodes.forEach(n => { allDocs.push(n); if (n.children) flatten(n.children) })
   flatten(tree)
@@ -44,6 +60,7 @@ export default function AppSidebar({ user, tree, onSignOut, onCreateDoc, onArchi
     onArchive: onArchiveDoc,
     onRename: onRenameDoc,
     onToggleStar,
+    onDuplicate: handleDuplicate,
   }
 
   return (
@@ -62,7 +79,6 @@ export default function AppSidebar({ user, tree, onSignOut, onCreateDoc, onArchi
         )}
       </AnimatePresence>
 
-      {/* Mobile overlay backdrop */}
       <AnimatePresence>
         {sidebarOpen && (
           <motion.div
@@ -135,7 +151,7 @@ export default function AppSidebar({ user, tree, onSignOut, onCreateDoc, onArchi
             {/* Scrollable content */}
             <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
 
-              {/* Starred section */}
+              {/* Starred */}
               {starred.length > 0 && (
                 <div className="mb-3">
                   <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] text-[#3a3a3f] font-semibold uppercase tracking-wider">
@@ -167,6 +183,42 @@ export default function AppSidebar({ user, tree, onSignOut, onCreateDoc, onArchi
               ) : tree.map(doc => (
                 <DocTreeItem key={doc.id} doc={doc} depth={0} {...treeItemProps} />
               ))}
+
+              {/* Trash */}
+              <div className="mt-4 pt-2 border-t border-[#1e1e22]">
+                <button
+                  onClick={handleTrashToggle}
+                  className="w-full flex items-center gap-1.5 px-2 py-1 text-[10px] text-[#3a3a3f] hover:text-[#6b6b75] font-semibold uppercase tracking-wider transition-colors"
+                >
+                  <Trash2 size={9} />
+                  Trash
+                  {archivedDocs.length > 0 && (
+                    <span className="ml-1 bg-[#2a2a2e] text-[#6b6b75] px-1.5 py-0.5 rounded-full text-[9px]">{archivedDocs.length}</span>
+                  )}
+                  <ChevronDown size={9} className={`ml-auto transition-transform ${trashOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {trashOpen && (
+                  <div className="mt-1 space-y-0.5">
+                    {archivedDocs.length === 0 ? (
+                      <p className="px-3 py-2 text-xs text-[#3a3a3f] italic">Trash is empty</p>
+                    ) : archivedDocs.map(doc => (
+                      <div key={doc.id} className="flex items-center gap-1 px-2 py-1 rounded-md text-xs text-[#4a4a55] hover:bg-[#1e1e22] hover:text-[#6b6b75] group transition-colors">
+                        <span className="flex-1 truncate">{doc.title || 'Untitled'}</span>
+                        <button
+                          onClick={() => onRestoreDoc(doc.id)}
+                          className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded hover:bg-[#2a2a2e] text-[#34c972] transition-colors"
+                          title="Restore"
+                        ><RotateCcw size={10} /></button>
+                        <button
+                          onClick={() => onDeleteDoc(doc.id)}
+                          className="opacity-0 group-hover:opacity-100 w-5 h-5 flex items-center justify-center rounded hover:bg-[#2a2a2e] text-[#f56565] transition-colors"
+                          title="Delete permanently"
+                        ><X size={10} /></button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* User */}

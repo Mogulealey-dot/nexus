@@ -16,7 +16,7 @@ export async function POST(request: Request) {
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    { cookies: { getAll: () => Object.entries(cookies).map(([name, value]) => ({ name, value })), setAll: () => {} } }
+    { cookies: { getAll: () => Object.entries(cookies).map(([name, value]) => ({ name, value: value as string })), setAll: () => {} } }
   )
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return new Response('Unauthorized', { status: 401 })

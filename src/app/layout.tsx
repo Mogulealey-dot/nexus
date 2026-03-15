@@ -5,8 +5,15 @@ import './globals.css'
 const inter = Inter({ subsets: ['latin'], variable: '--font-inter' })
 
 export const metadata: Metadata = {
-  title: 'Project Nexus',
-  description: 'The world\'s best note-taking app. Local-first, AI-native.',
+  title: 'Nexus — AI Notes',
+  description: 'Local-first, AI-native note-taking app powered by Claude AI.',
+  manifest: '/manifest.json',
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: 'black-translucent',
+    title: 'Nexus',
+  },
+  themeColor: '#7c6af7',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

@@ -9,6 +9,7 @@ import { useAppStore } from '@/store/appStore'
 import AppSidebar from '@/components/sidebar/AppSidebar'
 import CommandPalette from '@/components/command-palette/CommandPalette'
 import AIChatPanel from '@/components/ai/AIChatPanel'
+import ShortcutsModal from '@/components/ShortcutsModal'
 import { WifiOff, Sparkles } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 
@@ -16,10 +17,32 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const { user, signOut } = useAuth()
-  const { tree, docs, createDoc, updateTitle, archiveDoc, toggleStar, searchDocs } = useDocs(user?.id)
+  const {
+    tree, docs, archivedDocs,
+    createDoc, updateTitle, archiveDoc, restoreDoc, deleteDoc,
+    duplicateDoc, toggleStar, searchDocs, refetch, fetchArchived,
+  } = useDocs(user?.id)
   const isOnline = useOnlineStatus()
-  const { chatOpen, toggleChat } = useAppStore()
+  const { chatOpen, toggleChat, shortcutsOpen, setShortcutsOpen, toggleShortcuts } = useAppStore()
   useCommandPalette()
+
+  // Listen for doc updates from editor (e.g. icon changes) and refresh
+  useEffect(() => {
+    const handler = () => refetch()
+    window.addEventListener('nexus:docs-updated', handler)
+    return () => window.removeEventListener('nexus:docs-updated', handler)
+  }, [refetch])
+
+  // Global `?` key opens shortcuts overlay
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || (e.target as HTMLElement).isContentEditable) return
+      if (e.key === '?') toggleShortcuts()
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [toggleShortcuts])
 
   useEffect(() => {
     if (user === null) router.replace('/login')
@@ -37,7 +60,6 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
   const handleSignOut = async () => { await signOut(); router.replace('/login') }
 
-  // Get current page title for AI context
   const currentDocId = pathname?.split('/docs/')?.[1] || null
   const currentPageTitle = currentDocId ? docs.find(d => d.id === currentDocId)?.title : undefined
 
@@ -46,19 +68,22 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <AppSidebar
         user={user}
         tree={tree}
+        archivedDocs={archivedDocs}
         onSignOut={handleSignOut}
         onCreateDoc={createDoc}
         onArchiveDoc={archiveDoc}
+        onRestoreDoc={restoreDoc}
+        onDeleteDoc={deleteDoc}
         onRenameDoc={updateTitle}
         onToggleStar={toggleStar}
+        onDuplicateDoc={duplicateDoc}
+        onFetchArchived={fetchArchived}
       />
 
       <main className="flex-1 overflow-y-auto">{children}</main>
 
-      {/* AI chat panel */}
       <AIChatPanel docs={docs} currentPageTitle={currentPageTitle} />
 
-      {/* Floating AI button */}
       <AnimatePresence>
         {!chatOpen && (
           <motion.button
@@ -76,7 +101,8 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
 
       <CommandPalette docs={docs} onCreateDoc={createDoc} onSignOut={handleSignOut} onSearch={searchDocs} />
 
-      {/* Offline banner */}
+      <ShortcutsModal open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
+
       <AnimatePresence>
         {!isOnline && (
           <motion.div

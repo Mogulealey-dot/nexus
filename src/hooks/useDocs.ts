@@ -5,6 +5,7 @@ import type { DocMeta } from '@/types'
 
 export function useDocs(userId: string | undefined) {
   const [docs, setDocs] = useState<DocMeta[]>([])
+  const [archivedDocs, setArchivedDocs] = useState<DocMeta[]>([])
   const [loading, setLoading] = useState(true)
   const supabase = getSupabaseClient()
 
@@ -18,6 +19,17 @@ export function useDocs(userId: string | undefined) {
       .order('created_at', { ascending: true })
     setDocs((data as DocMeta[]) || [])
     setLoading(false)
+  }, [userId, supabase])
+
+  const fetchArchived = useCallback(async () => {
+    if (!userId) return
+    const { data } = await supabase
+      .from('docs')
+      .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, created_at, updated_at')
+      .eq('user_id', userId)
+      .eq('is_archived', true)
+      .order('updated_at', { ascending: false })
+    setArchivedDocs((data as DocMeta[]) || [])
   }, [userId, supabase])
 
   useEffect(() => { fetchDocs() }, [fetchDocs])
@@ -38,10 +50,53 @@ export function useDocs(userId: string | undefined) {
     setDocs(prev => prev.map(d => d.id === id ? { ...d, title } : d))
   }, [supabase])
 
+  const updateIcon = useCallback(async (id: string, icon: string | null) => {
+    await supabase.from('docs').update({ icon }).eq('id', id)
+    setDocs(prev => prev.map(d => d.id === id ? { ...d, icon } : d))
+    window.dispatchEvent(new CustomEvent('nexus:docs-updated'))
+  }, [supabase])
+
   const archiveDoc = useCallback(async (id: string) => {
     await supabase.from('docs').update({ is_archived: true }).eq('id', id)
     await fetchDocs()
+    await fetchArchived()
+  }, [supabase, fetchDocs, fetchArchived])
+
+  const restoreDoc = useCallback(async (id: string) => {
+    await supabase.from('docs').update({ is_archived: false }).eq('id', id)
+    await fetchDocs()
+    setArchivedDocs(prev => prev.filter(d => d.id !== id))
   }, [supabase, fetchDocs])
+
+  const deleteDoc = useCallback(async (id: string) => {
+    await supabase.from('docs').delete().eq('id', id)
+    setArchivedDocs(prev => prev.filter(d => d.id !== id))
+  }, [supabase])
+
+  const duplicateDoc = useCallback(async (id: string) => {
+    if (!userId) return null
+    const source = docs.find(d => d.id === id)
+    if (!source) return null
+    const { data: sourceData } = await supabase
+      .from('docs')
+      .select('content, text_content')
+      .eq('id', id)
+      .single()
+    const { data: newDoc } = await supabase
+      .from('docs')
+      .insert({
+        user_id: userId,
+        title: `${source.title || 'Untitled'} (copy)`,
+        parent_id: source.parent_id || null,
+        icon: source.icon,
+        content: sourceData?.content || null,
+        text_content: (sourceData as Record<string, unknown>)?.text_content || null,
+      })
+      .select('id')
+      .single()
+    await fetchDocs()
+    return newDoc?.id as string | null
+  }, [userId, supabase, docs, fetchDocs])
 
   const toggleStar = useCallback(async (id: string) => {
     const doc = docs.find(d => d.id === id)
@@ -53,15 +108,9 @@ export function useDocs(userId: string | undefined) {
 
   const searchDocs = useCallback(async (query: string): Promise<DocMeta[]> => {
     if (!userId || !query.trim()) return []
-
-    // Sanitize query to prevent PostgREST filter injection — commas and parens
-    // can break the .or() filter syntax and expose unintended rows
     const safe = query.replace(/[,()]/g, '').trim()
     if (!safe) return []
-
-    // Run keyword search and semantic search in parallel
     const [keywordRes, semanticRes] = await Promise.allSettled([
-      // Keyword search (sanitized)
       supabase
         .from('docs')
         .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, created_at, updated_at')
@@ -69,8 +118,6 @@ export function useDocs(userId: string | undefined) {
         .eq('is_archived', false)
         .or(`title.ilike.%${safe}%,text_content.ilike.%${safe}%`)
         .limit(10),
-
-      // Semantic search — generate embedding then query match_docs RPC
       (async () => {
         const resp = await fetch('/api/ai/embed', {
           method: 'POST',
@@ -87,19 +134,14 @@ export function useDocs(userId: string | undefined) {
         })
       })(),
     ])
-
     const keywordIds = new Set<string>()
     const results: DocMeta[] = []
-
-    // Add keyword results first
     if (keywordRes.status === 'fulfilled' && keywordRes.value.data) {
       for (const d of keywordRes.value.data as DocMeta[]) {
         keywordIds.add(d.id)
         results.push(d)
       }
     }
-
-    // Add semantic results that weren't already found by keyword search
     if (semanticRes.status === 'fulfilled') {
       const semanticData = (semanticRes.value as { data: { id: string }[] | null }).data || []
       for (const row of semanticData) {
@@ -109,11 +151,9 @@ export function useDocs(userId: string | undefined) {
         }
       }
     }
-
     return results.slice(0, 15)
   }, [userId, supabase, docs])
 
-  // Memoize derived lists so they don't recompute on every render
   const tree = useMemo(() => buildTree(docs), [docs])
   const starred = useMemo(() => docs.filter(d => d.is_starred), [docs])
   const recent = useMemo(
@@ -121,7 +161,11 @@ export function useDocs(userId: string | undefined) {
     [docs]
   )
 
-  return { docs, tree, starred, recent, loading, createDoc, updateTitle, archiveDoc, toggleStar, searchDocs, refetch: fetchDocs }
+  return {
+    docs, tree, starred, recent, archivedDocs, loading,
+    createDoc, updateTitle, updateIcon, archiveDoc, restoreDoc, deleteDoc,
+    duplicateDoc, toggleStar, searchDocs, refetch: fetchDocs, fetchArchived,
+  }
 }
 
 function buildTree(docs: DocMeta[]): DocMeta[] {
