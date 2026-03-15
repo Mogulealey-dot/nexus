@@ -11,25 +11,56 @@ export function useDocs(userId: string | undefined) {
 
   const fetchDocs = useCallback(async () => {
     if (!userId) { setLoading(false); return }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('docs')
       .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, position, is_public, public_slug, created_at, updated_at')
       .eq('user_id', userId)
       .eq('is_archived', false)
       .order('created_at', { ascending: true })
-    setDocs((data as DocMeta[]) || [])
+    if (error) {
+      // Fallback: query only base columns (some optional columns may not exist yet)
+      console.warn('Full docs query failed, falling back to base columns:', error.message)
+      const { data: baseData } = await supabase
+        .from('docs')
+        .select('id, user_id, title, parent_id, icon, is_archived, created_at, updated_at')
+        .eq('user_id', userId)
+        .eq('is_archived', false)
+        .order('created_at', { ascending: true })
+      setDocs(((baseData || []).map((d: Record<string, unknown>) => ({
+        ...d,
+        is_starred: false,
+        tags: [],
+        position: null,
+        is_public: false,
+        public_slug: null,
+      })) as DocMeta[]))
+    } else {
+      setDocs((data as DocMeta[]) || [])
+    }
     setLoading(false)
   }, [userId, supabase])
 
   const fetchArchived = useCallback(async () => {
     if (!userId) return
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('docs')
       .select('id, user_id, title, parent_id, icon, is_archived, is_starred, tags, position, is_public, public_slug, created_at, updated_at')
       .eq('user_id', userId)
       .eq('is_archived', true)
       .order('updated_at', { ascending: false })
-    setArchivedDocs((data as DocMeta[]) || [])
+    if (error) {
+      const { data: baseData } = await supabase
+        .from('docs')
+        .select('id, user_id, title, parent_id, icon, is_archived, created_at, updated_at')
+        .eq('user_id', userId)
+        .eq('is_archived', true)
+        .order('updated_at', { ascending: false })
+      setArchivedDocs(((baseData || []).map((d: Record<string, unknown>) => ({
+        ...d, is_starred: false, tags: [], position: null, is_public: false, public_slug: null,
+      })) as DocMeta[]))
+    } else {
+      setArchivedDocs((data as DocMeta[]) || [])
+    }
   }, [userId, supabase])
 
   useEffect(() => { fetchDocs() }, [fetchDocs])
