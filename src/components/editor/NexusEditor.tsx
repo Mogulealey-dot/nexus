@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState, useCallback, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import { useEditor, EditorContent } from '@tiptap/react'
 import StarterKit from '@tiptap/starter-kit'
 import Placeholder from '@tiptap/extension-placeholder'
@@ -18,7 +19,7 @@ import Mathematics from '@tiptap/extension-mathematics'
 import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff, FileText, X, Copy, ChevronsDown, History, RotateCcw, Tag, Plus, BookOpen, Edit3, BarChart2, Link2, List, Share2 } from 'lucide-react'
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff, FileText, X, Copy, ChevronsDown, History, RotateCcw, Tag, Plus, BookOpen, Edit3, BarChart2, Link2, List, Share2, ArrowLeft, ArrowRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SlashCommand } from './extensions/SlashCommand'
 import { getSupabaseClient } from '@/lib/supabase/client'
@@ -964,6 +965,9 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           <div className={cn('w-1.5 h-1.5 rounded-full', saveStatus === 'saving' && 'animate-pulse', saveStatus === 'saved' ? 'bg-[#34c972]' : saveStatus === 'saving' ? 'bg-[#f5a623]' : 'bg-[#4a4a55]')} />
           {saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved'}
         </div>
+        <span className="text-xs text-[#3a3a3f] tabular-nums select-none" title={`${charCount} characters`}>
+          {wordCount} words · {readTime} min read
+        </span>
         <button
           onClick={() => imageInputRef.current?.click()}
           disabled={isUploadingImage}
@@ -1114,6 +1118,36 @@ export default function NexusEditor({ docId, initialTitle, initialTags, initialI
 }) {
   const [ydoc, setYdoc] = useState<Y.Doc | null>(null)
   const supabase = getSupabaseClient()
+  const router = useRouter()
+  const { navHistory, navIndex, pushNav, navBack, navForward } = useAppStore()
+
+  // Push current doc to nav history when it changes
+  useEffect(() => {
+    pushNav(docId)
+  }, [docId, pushNav])
+
+  const handleNavBack = () => {
+    const id = navBack()
+    if (id) router.push(`/docs/${id}`)
+  }
+
+  const handleNavForward = () => {
+    const id = navForward()
+    if (id) router.push(`/docs/${id}`)
+  }
+
+  const canBack = navIndex > 0
+  const canForward = navIndex < navHistory.length - 1
+
+  // Keyboard shortcuts: Alt+← back, Alt+→ forward
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); handleNavBack() }
+      if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); handleNavForward() }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [navIndex, navHistory])
 
   // Real-time presence — shows who else is currently editing this document
   const presenceUser = userId ? { id: userId, email: userEmail } : null
@@ -1201,12 +1235,34 @@ export default function NexusEditor({ docId, initialTitle, initialTags, initialI
 
   return (
     <div>
-      {/* Presence bar — only visible when collaborators are in the doc */}
-      {activeUsers.length > 0 && (
-        <div className="sticky top-0 z-30 flex items-center justify-end px-8 py-2 bg-[#0d0d0f]/80 backdrop-blur-sm border-b border-[#1e1e22]">
-          <PresenceAvatars users={activeUsers} />
+      {/* Top bar — back/forward nav + presence avatars */}
+      <div className="sticky top-0 z-30 flex items-center justify-between px-4 py-2 bg-[#0d0d0f]/80 backdrop-blur-sm border-b border-[#1e1e22]">
+        <div className="flex items-center gap-1">
+          <button
+            onClick={handleNavBack}
+            disabled={!canBack}
+            title="Go back (Alt+←)"
+            className={cn(
+              'w-7 h-7 flex items-center justify-center rounded-md transition-colors',
+              canBack ? 'text-[#6b6b75] hover:bg-[#1e1e22] hover:text-[#e8e8ed]' : 'text-[#2a2a2e] cursor-not-allowed'
+            )}
+          >
+            <ArrowLeft size={14} />
+          </button>
+          <button
+            onClick={handleNavForward}
+            disabled={!canForward}
+            title="Go forward (Alt+→)"
+            className={cn(
+              'w-7 h-7 flex items-center justify-center rounded-md transition-colors',
+              canForward ? 'text-[#6b6b75] hover:bg-[#1e1e22] hover:text-[#e8e8ed]' : 'text-[#2a2a2e] cursor-not-allowed'
+            )}
+          >
+            <ArrowRight size={14} />
+          </button>
         </div>
-      )}
+        {activeUsers.length > 0 && <PresenceAvatars users={activeUsers} />}
+      </div>
       <EditorInner
         docId={docId}
         initialTitle={initialTitle}
