@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { Search, Plus, ChevronLeft, Sparkles, Star, CheckSquare, Home, Trash2, RotateCcw, X, ChevronDown, Calendar, Network, Upload } from 'lucide-react'
+import { Search, Plus, ChevronLeft, Sparkles, Star, CheckSquare, Home, Trash2, RotateCcw, X, ChevronDown, Calendar, Network, Upload, Mail } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
 import DocTreeItem from './DocTreeItem'
@@ -183,6 +183,12 @@ export default function AppSidebar({ user, tree, docs, archivedDocs, onSignOut, 
                 className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${pathname === '/tasks' ? 'bg-[#7c6af7]/15 text-[#e8e8ed]' : 'text-[#6b6b75] hover:bg-[#1e1e22] hover:text-[#a0a0aa]'}`}
               >
                 <CheckSquare size={14} /> Tasks
+              </button>
+              <button
+                onClick={() => router.push('/gmail')}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${pathname === '/gmail' ? 'bg-[#7c6af7]/15 text-[#e8e8ed]' : 'text-[#6b6b75] hover:bg-[#1e1e22] hover:text-[#a0a0aa]'}`}
+              >
+                <Mail size={14} /> Gmail
               </button>
             </div>
 

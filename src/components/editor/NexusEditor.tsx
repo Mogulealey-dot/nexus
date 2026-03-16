@@ -10,6 +10,9 @@ import TaskList from '@tiptap/extension-task-list'
 import TaskItem from '@tiptap/extension-task-item'
 import Highlight from '@tiptap/extension-highlight'
 import Underline from '@tiptap/extension-underline'
+import Color from '@tiptap/extension-color'
+import { TextStyle } from '@tiptap/extension-text-style'
+import FontFamily from '@tiptap/extension-font-family'
 import Link from '@tiptap/extension-link'
 import TextAlign from '@tiptap/extension-text-align'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
@@ -19,7 +22,7 @@ import Mathematics from '@tiptap/extension-mathematics'
 import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { IndexeddbPersistence } from 'y-indexeddb'
-import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff, FileText, X, Copy, ChevronsDown, History, RotateCcw, Tag, Plus, BookOpen, Edit3, BarChart2, Link2, List, Share2, ArrowLeft, ArrowRight } from 'lucide-react'
+import { Bold, Italic, Underline as UnderlineIcon, Strikethrough, Code, AlignLeft, AlignCenter, AlignRight, Sparkles, Download, ImagePlus, Mic, MicOff, FileText, X, Copy, ChevronsDown, History, RotateCcw, Tag, Plus, BookOpen, Edit3, BarChart2, Link2, List, Share2, ArrowLeft, ArrowRight, Highlighter, Type, ChevronDown as ChevronDownSmall } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { SlashCommand } from './extensions/SlashCommand'
 import { getSupabaseClient } from '@/lib/supabase/client'
@@ -37,15 +40,27 @@ import 'katex/dist/katex.min.css'
 
 const lowlight = createLowlight(common)
 
+const FONTS = [
+  { label: 'Default', value: '' },
+  { label: 'Inter',   value: 'Inter, sans-serif' },
+  { label: 'Serif',   value: 'Georgia, serif' },
+  { label: 'Mono',    value: 'Courier New, monospace' },
+  { label: 'Arial',   value: 'Arial, sans-serif' },
+]
+
+const HIGHLIGHT_COLORS = ['#fef08a','#86efac','#93c5fd','#f9a8d4','#fdba74','#c4b5fd']
+const TEXT_COLORS      = ['#f56565','#f5a623','#34c972','#60a5fa','#c084fc','#f472b6','#e8e8ed','#6b6b75']
+
 // Floating selection toolbar
 function SelectionToolbar({ editor }: { editor: Editor }) {
   const [rect, setRect] = useState<DOMRect | null>(null)
   const [show, setShow] = useState(false)
+  const [openPanel, setOpenPanel] = useState<'font' | 'highlight' | 'color' | null>(null)
 
   useEffect(() => {
     const update = () => {
       const { from, to } = editor.state.selection
-      if (from === to) { setShow(false); return }
+      if (from === to) { setShow(false); setOpenPanel(null); return }
       const sel = window.getSelection()
       if (!sel?.rangeCount) { setShow(false); return }
       const r = sel.getRangeAt(0).getBoundingClientRect()
@@ -53,7 +68,7 @@ function SelectionToolbar({ editor }: { editor: Editor }) {
       setRect(r)
       setShow(true)
     }
-    const hide = () => setShow(false)
+    const hide = () => { setShow(false); setOpenPanel(null) }
     editor.on('selectionUpdate', update)
     editor.on('blur', hide)
     return () => { editor.off('selectionUpdate', update); editor.off('blur', hide) }
@@ -64,30 +79,162 @@ function SelectionToolbar({ editor }: { editor: Editor }) {
   const top = rect.top + window.scrollY - 48
   const left = rect.left + rect.width / 2
 
-  const buttons = [
-    { icon: <Bold size={13} />, action: () => editor.chain().focus().toggleBold().run(), active: editor.isActive('bold') },
-    { icon: <Italic size={13} />, action: () => editor.chain().focus().toggleItalic().run(), active: editor.isActive('italic') },
-    { icon: <UnderlineIcon size={13} />, action: () => editor.chain().focus().toggleUnderline().run(), active: editor.isActive('underline') },
-    { icon: <Strikethrough size={13} />, action: () => editor.chain().focus().toggleStrike().run(), active: editor.isActive('strike') },
-    { icon: <Code size={13} />, action: () => editor.chain().focus().toggleCode().run(), active: editor.isActive('code') },
-    null,
-    { icon: <AlignLeft size={13} />, action: () => editor.chain().focus().setTextAlign('left').run(), active: false },
-    { icon: <AlignCenter size={13} />, action: () => editor.chain().focus().setTextAlign('center').run(), active: false },
-    { icon: <AlignRight size={13} />, action: () => editor.chain().focus().setTextAlign('right').run(), active: false },
-  ]
+  const togglePanel = (panel: 'font' | 'highlight' | 'color') =>
+    setOpenPanel(p => p === panel ? null : panel)
+
+  const activeHighlight = HIGHLIGHT_COLORS.find(c => editor.isActive('highlight', { color: c }))
+  const activeColor = TEXT_COLORS.find(c => editor.isActive('textStyle', { color: c }))
+  const activeFontObj = FONTS.find(f => f.value && editor.isActive('textStyle', { fontFamily: f.value }))
 
   return (
     <div
-      className="fixed z-50 flex items-center gap-0.5 bg-[#1a1a1d] border border-[#2a2a2e] rounded-lg p-1 shadow-2xl -translate-x-1/2"
+      className="fixed z-50 -translate-x-1/2"
       style={{ top, left }}
       onMouseDown={e => e.preventDefault()}
     >
-      {buttons.map((btn, i) =>
-        btn === null
-          ? <div key={i} className="w-px h-4 bg-[#2a2a2e] mx-0.5" />
-          : <button key={i} onClick={btn.action}
-              className={cn('p-1.5 rounded-md transition-colors', btn.active ? 'bg-[#7c6af7] text-white' : 'text-[#a0a0aa] hover:bg-[#2a2a2e] hover:text-white')}
-            >{btn.icon}</button>
+      {/* Main toolbar row */}
+      <div className="flex items-center gap-0.5 bg-[#1a1a1d] border border-[#2a2a2e] rounded-lg p-1 shadow-2xl">
+        {/* Bold / Italic / Underline / Strike / Code */}
+        {[
+          { icon: <Bold size={13} />, action: () => editor.chain().focus().toggleBold().run(), active: editor.isActive('bold') },
+          { icon: <Italic size={13} />, action: () => editor.chain().focus().toggleItalic().run(), active: editor.isActive('italic') },
+          { icon: <UnderlineIcon size={13} />, action: () => editor.chain().focus().toggleUnderline().run(), active: editor.isActive('underline') },
+          { icon: <Strikethrough size={13} />, action: () => editor.chain().focus().toggleStrike().run(), active: editor.isActive('strike') },
+          { icon: <Code size={13} />, action: () => editor.chain().focus().toggleCode().run(), active: editor.isActive('code') },
+        ].map((btn, i) => (
+          <button key={i} onClick={btn.action}
+            className={cn('p-1.5 rounded-md transition-colors', btn.active ? 'bg-[#7c6af7] text-white' : 'text-[#a0a0aa] hover:bg-[#2a2a2e] hover:text-white')}
+          >{btn.icon}</button>
+        ))}
+
+        <div className="w-px h-4 bg-[#2a2a2e] mx-0.5" />
+
+        {/* Align */}
+        {[
+          { icon: <AlignLeft size={13} />, action: () => editor.chain().focus().setTextAlign('left').run() },
+          { icon: <AlignCenter size={13} />, action: () => editor.chain().focus().setTextAlign('center').run() },
+          { icon: <AlignRight size={13} />, action: () => editor.chain().focus().setTextAlign('right').run() },
+        ].map((btn, i) => (
+          <button key={i} onClick={btn.action}
+            className="p-1.5 rounded-md text-[#a0a0aa] hover:bg-[#2a2a2e] hover:text-white transition-colors"
+          >{btn.icon}</button>
+        ))}
+
+        <div className="w-px h-4 bg-[#2a2a2e] mx-0.5" />
+
+        {/* Highlight picker toggle */}
+        <button
+          onClick={() => togglePanel('highlight')}
+          title="Highlight color"
+          className={cn('flex items-center gap-0.5 p-1.5 rounded-md transition-colors', openPanel === 'highlight' ? 'bg-[#2a2a2e] text-white' : 'text-[#a0a0aa] hover:bg-[#2a2a2e] hover:text-white')}
+        >
+          <Highlighter size={13} />
+          <span className="w-2.5 h-2.5 rounded-sm border border-[#3a3a3f]" style={{ background: activeHighlight ?? '#fef08a' }} />
+        </button>
+
+        {/* Text color picker toggle */}
+        <button
+          onClick={() => togglePanel('color')}
+          title="Text color"
+          className={cn('flex items-center gap-0.5 p-1.5 rounded-md transition-colors', openPanel === 'color' ? 'bg-[#2a2a2e] text-white' : 'text-[#a0a0aa] hover:bg-[#2a2a2e] hover:text-white')}
+        >
+          <Type size={13} />
+          <span className="w-2.5 h-2.5 rounded-sm border border-[#3a3a3f]" style={{ background: activeColor ?? '#e8e8ed' }} />
+        </button>
+
+        <div className="w-px h-4 bg-[#2a2a2e] mx-0.5" />
+
+        {/* Font family dropdown toggle */}
+        <button
+          onClick={() => togglePanel('font')}
+          title="Font family"
+          className={cn('flex items-center gap-1 px-2 py-1.5 rounded-md text-[11px] transition-colors', openPanel === 'font' ? 'bg-[#2a2a2e] text-white' : 'text-[#a0a0aa] hover:bg-[#2a2a2e] hover:text-white')}
+        >
+          <span>{activeFontObj?.label ?? 'Font'}</span>
+          <ChevronDownSmall size={10} />
+        </button>
+      </div>
+
+      {/* Highlight swatches */}
+      {openPanel === 'highlight' && (
+        <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-[#1a1a1d] border border-[#2a2a2e] rounded-lg p-1.5 shadow-2xl">
+          {HIGHLIGHT_COLORS.map(color => (
+            <button
+              key={color}
+              title={color}
+              onClick={() => {
+                if (editor.isActive('highlight', { color })) {
+                  editor.chain().focus().unsetHighlight().run()
+                } else {
+                  editor.chain().focus().setHighlight({ color }).run()
+                }
+                setOpenPanel(null)
+              }}
+              className={cn('w-5 h-5 rounded border-2 transition-transform hover:scale-110', activeHighlight === color ? 'border-[#7c6af7]' : 'border-transparent')}
+              style={{ background: color }}
+            />
+          ))}
+          {activeHighlight && (
+            <button
+              onClick={() => { editor.chain().focus().unsetHighlight().run(); setOpenPanel(null) }}
+              className="w-5 h-5 rounded border border-[#2a2a2e] text-[#6b6b75] hover:text-white hover:border-[#4a4a55] flex items-center justify-center text-[10px] transition-colors"
+              title="Remove highlight"
+            >✕</button>
+          )}
+        </div>
+      )}
+
+      {/* Text color swatches */}
+      {openPanel === 'color' && (
+        <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 flex items-center gap-1 bg-[#1a1a1d] border border-[#2a2a2e] rounded-lg p-1.5 shadow-2xl">
+          {TEXT_COLORS.map(color => (
+            <button
+              key={color}
+              title={color}
+              onClick={() => {
+                editor.chain().focus().setColor(color).run()
+                setOpenPanel(null)
+              }}
+              className={cn('w-5 h-5 rounded border-2 transition-transform hover:scale-110', activeColor === color ? 'border-[#7c6af7]' : 'border-transparent')}
+              style={{ background: color }}
+            />
+          ))}
+          {activeColor && (
+            <button
+              onClick={() => { editor.chain().focus().unsetColor().run(); setOpenPanel(null) }}
+              className="w-5 h-5 rounded border border-[#2a2a2e] text-[#6b6b75] hover:text-white hover:border-[#4a4a55] flex items-center justify-center text-[10px] transition-colors"
+              title="Reset color"
+            >✕</button>
+          )}
+        </div>
+      )}
+
+      {/* Font family list */}
+      {openPanel === 'font' && (
+        <div className="absolute top-full mt-1 left-1/2 -translate-x-1/2 flex flex-col bg-[#1a1a1d] border border-[#2a2a2e] rounded-lg p-1 shadow-2xl min-w-[130px]">
+          {FONTS.map(font => (
+            <button
+              key={font.label}
+              onClick={() => {
+                if (font.value) {
+                  editor.chain().focus().setFontFamily(font.value).run()
+                } else {
+                  editor.chain().focus().unsetFontFamily().run()
+                }
+                setOpenPanel(null)
+              }}
+              className={cn(
+                'px-3 py-1.5 rounded-md text-left text-xs transition-colors',
+                activeFontObj?.value === font.value || (!activeFontObj && !font.value)
+                  ? 'bg-[#7c6af7]/20 text-[#e8e8ed]'
+                  : 'text-[#a0a0aa] hover:bg-[#2a2a2e] hover:text-white'
+              )}
+              style={{ fontFamily: font.value || undefined }}
+            >
+              {font.label}
+            </button>
+          ))}
+        </div>
       )}
     </div>
   )
@@ -235,7 +382,10 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
       Typography,
       TaskList,
       TaskItem.configure({ nested: true }),
-      Highlight.configure({ multicolor: false }),
+      TextStyle,
+      Color,
+      FontFamily,
+      Highlight.configure({ multicolor: true }),
       Underline,
       Link.configure({ openOnClick: false }),
       TextAlign.configure({ types: ['heading', 'paragraph'] }),

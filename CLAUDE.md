@@ -75,7 +75,36 @@ alter table docs add column if not exists embedding vector(384);
 ```
 
 6. Enable Auth providers in Supabase: Email/Password + Google
-4. Set Google OAuth redirect URL to `http://localhost:3000/callback` (dev) and your deployed URL
+7. Set Google OAuth redirect URL to `http://localhost:3000/callback` (dev) and your deployed URL
+
+8. Run this SQL to create the gmail_tokens table (for Gmail integration):
+
+```sql
+create table gmail_tokens (
+  id           uuid primary key default gen_random_uuid(),
+  user_id      uuid references auth.users(id) on delete cascade not null unique,
+  access_token text not null,
+  refresh_token text,
+  token_type   text default 'Bearer',
+  expiry_date  bigint,
+  created_at   timestamptz default now(),
+  updated_at   timestamptz default now()
+);
+
+alter table gmail_tokens enable row level security;
+create policy "Users own their gmail tokens" on gmail_tokens for all using (auth.uid() = user_id);
+```
+
+9. Gmail integration env vars — add to `.env.local` (and Vercel env vars for production):
+   - `NEXT_PUBLIC_APP_URL` — e.g. `http://localhost:3000` (dev) or `https://nexus-nu-seven.vercel.app` (prod)
+   - `GOOGLE_CLIENT_ID` — from Google Cloud Console → APIs & Services → Credentials
+   - `GOOGLE_CLIENT_SECRET` — same credential
+
+   **Google Cloud setup:**
+   1. Go to console.cloud.google.com → APIs & Services → Library → Enable "Gmail API"
+   2. APIs & Services → Credentials → Create OAuth 2.0 Client ID (type: **Web application**)
+   3. Authorised redirect URIs: `http://localhost:3000/api/gmail/callback` + your Vercel URL
+   4. Copy Client ID + Secret into env vars above
 
 ## Architecture
 
