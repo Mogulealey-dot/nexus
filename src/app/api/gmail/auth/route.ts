@@ -33,6 +33,8 @@ export async function GET() {
       'https://www.googleapis.com/auth/calendar.readonly',
       'https://www.googleapis.com/auth/drive.readonly',
       'https://www.googleapis.com/auth/tasks',
+      'https://www.googleapis.com/auth/documents.readonly',
+      'https://www.googleapis.com/auth/spreadsheets.readonly',
     ],
     prompt: 'consent',
     state: user.id,
