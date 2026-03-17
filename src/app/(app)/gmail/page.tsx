@@ -69,7 +69,7 @@ export default function GmailPage() {
       setConnected(data.connected)
       if (data.connected) {
         setEmails(data.emails ?? [])
-        if (data.error) setError(data.error)
+        if (data.error) setError(`Error: ${data.error}`)
       }
     } catch {
       setError('Failed to load emails')

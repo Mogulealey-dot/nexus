@@ -156,7 +156,8 @@ ${emailList}`,
 
     return Response.json({ connected: true, emails: ranked })
   } catch (err) {
-    console.error('[gmail/emails]', err)
-    return Response.json({ connected: true, emails: [], error: 'Failed to fetch emails' }, { status: 500 })
+    const message = err instanceof Error ? err.message : String(err)
+    console.error('[gmail/emails]', message)
+    return Response.json({ connected: true, emails: [], error: message }, { status: 500 })
   }
 }
