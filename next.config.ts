@@ -1,7 +1,7 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  serverExternalPackages: ['@xenova/transformers', 'googleapis'],
+  serverExternalPackages: ['@xenova/transformers', 'googleapis', 'mammoth'],
   experimental: {
     serverActions: { bodySizeLimit: '4mb' },
   },

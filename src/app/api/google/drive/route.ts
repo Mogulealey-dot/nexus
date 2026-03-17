@@ -2,6 +2,8 @@ import { createServerClient } from '@supabase/ssr'
 import { createClient } from '@supabase/supabase-js'
 import { cookies } from 'next/headers'
 import { google } from 'googleapis'
+import * as XLSX from 'xlsx'
+import mammoth from 'mammoth'
 
 export async function GET(request: Request) {
   const cookieStore = await cookies()
@@ -62,27 +64,84 @@ export async function GET(request: Request) {
   try {
     const drive = google.drive({ version: 'v3', auth: oAuth2 })
 
-    // Download the text content of a specific file
+    // Download and parse a specific file
     if (fileId && download) {
-      // Get file metadata first to check mimeType
       const meta = await drive.files.get({ fileId, fields: 'id,name,mimeType' })
       const mimeType = meta.data.mimeType || ''
+      const name = meta.data.name || 'Untitled'
 
+      // --- Excel (.xlsx / .xls / Google Sheets export) ---
+      const isExcel =
+        mimeType.includes('spreadsheetml') ||
+        mimeType.includes('ms-excel') ||
+        mimeType === 'application/vnd.google-apps.spreadsheet'
+
+      if (isExcel) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res = await (drive.files.get as any)(
+          { fileId, alt: mimeType === 'application/vnd.google-apps.spreadsheet' ? undefined : 'media' },
+          { responseType: 'arraybuffer' }
+        )
+        // Google Sheets: export as xlsx first
+        let buf: ArrayBuffer
+        if (mimeType === 'application/vnd.google-apps.spreadsheet') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const exp = await (drive.files.export as any)(
+            { fileId, mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' },
+            { responseType: 'arraybuffer' }
+          )
+          buf = exp.data as ArrayBuffer
+        } else {
+          buf = res.data as ArrayBuffer
+        }
+
+        const workbook = XLSX.read(Buffer.from(buf))
+        const sheets: { name: string; rows: string[][] }[] = workbook.SheetNames.map(sheetName => ({
+          name: sheetName,
+          rows: XLSX.utils.sheet_to_json<string[]>(workbook.Sheets[sheetName], { header: 1, defval: '' }),
+        }))
+        // Convert to tab-separated text (all sheets combined)
+        const text = sheets.map(s =>
+          `=== ${s.name} ===\n` + s.rows.map(r => r.join('\t')).join('\n')
+        ).join('\n\n')
+        return Response.json({ connected: true, name, text, format: 'excel', sheets })
+      }
+
+      // --- Word (.docx / .doc / Google Docs export) ---
+      const isWord =
+        mimeType.includes('wordprocessingml') ||
+        mimeType.includes('msword') ||
+        mimeType === 'application/vnd.google-apps.document'
+
+      if (isWord) {
+        let buf: Buffer
+        if (mimeType === 'application/vnd.google-apps.document') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const exp = await (drive.files.export as any)(
+            { fileId, mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' },
+            { responseType: 'arraybuffer' }
+          )
+          buf = Buffer.from(exp.data as ArrayBuffer)
+        } else {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const res = await (drive.files.get as any)({ fileId, alt: 'media' }, { responseType: 'arraybuffer' })
+          buf = Buffer.from(res.data as ArrayBuffer)
+        }
+        const result = await mammoth.extractRawText({ buffer: buf })
+        return Response.json({ connected: true, name, text: result.value, format: 'word' })
+      }
+
+      // --- Plain text / Markdown ---
       let text = ''
-      if (mimeType === 'application/vnd.google-apps.document') {
-        // Export Google Doc as plain text
-        const res = await drive.files.export({ fileId, mimeType: 'text/plain' })
-        text = res.data as string
-      } else if (mimeType.startsWith('text/') || mimeType.includes('markdown')) {
-        // Download raw text file using axios-style responseType
+      if (mimeType.startsWith('text/') || mimeType.includes('markdown')) {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const res = await (drive.files.get as any)({ fileId, alt: 'media' }, { responseType: 'text' })
         text = typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
       } else {
-        return Response.json({ error: 'File type cannot be imported as text' }, { status: 400 })
+        return Response.json({ error: 'File type cannot be imported' }, { status: 400 })
       }
 
-      return Response.json({ connected: true, name: meta.data.name, text })
+      return Response.json({ connected: true, name, text })
     }
 
     const q = query

@@ -57,6 +57,8 @@ function getMimeLabel(mimeType: string) {
   if (mimeType.includes('google-apps.spreadsheet')) return 'Sheet'
   if (mimeType.includes('google-apps.presentation')) return 'Slides'
   if (mimeType.includes('google-apps.form')) return 'Form'
+  if (mimeType.includes('wordprocessingml') || mimeType.includes('msword')) return 'Word'
+  if (mimeType.includes('spreadsheetml') || mimeType.includes('ms-excel')) return 'Excel'
   if (mimeType.includes('pdf')) return 'PDF'
   if (mimeType.includes('image')) return 'Image'
   if (mimeType.includes('video')) return 'Video'
@@ -68,7 +70,12 @@ function isImportable(mimeType: string) {
   return (
     mimeType.startsWith('text/') ||
     mimeType.includes('markdown') ||
-    mimeType === 'application/vnd.google-apps.document'
+    mimeType === 'application/vnd.google-apps.document' ||
+    mimeType.includes('spreadsheetml') ||
+    mimeType.includes('ms-excel') ||
+    mimeType === 'application/vnd.google-apps.spreadsheet' ||
+    mimeType.includes('wordprocessingml') ||
+    mimeType.includes('msword')
   )
 }
 
@@ -108,10 +115,14 @@ export default function DrivePage() {
       const json = await res.json()
       if (!json.text && json.error) throw new Error(json.error)
 
+      const isExcel = file.mimeType.includes('spreadsheetml') || file.mimeType.includes('ms-excel')
+      const isWord = file.mimeType.includes('wordprocessingml') || file.mimeType.includes('msword')
+      const icon = isExcel ? '📊' : isWord ? '📝' : '📄'
+      const cleanTitle = file.name.replace(/\.(md|txt|xlsx|xls|docx|doc)$/i, '')
       const importRes = await fetch('/api/nexus/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: file.name.replace(/\.(md|txt)$/i, ''), text: json.text, source: 'Google Drive', icon: '📄' }),
+        body: JSON.stringify({ title: cleanTitle, text: json.text, source: 'Google Drive', icon }),
       })
       const { docId } = await importRes.json()
       if (docId) router.push(`/docs/${docId}`)

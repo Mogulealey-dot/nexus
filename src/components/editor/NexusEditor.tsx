@@ -1091,6 +1091,57 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           Export .md
         </button>
 
+        {/* Export as Excel */}
+        <button
+          onClick={async () => {
+            const { utils, write } = await import('xlsx')
+            const text = editor.getText()
+            const lines = text.split('\n').filter(l => l.trim())
+            const ws = utils.aoa_to_sheet(lines.map(l => [l]))
+            const wb = utils.book_new()
+            utils.book_append_sheet(wb, ws, 'Sheet1')
+            const buf = write(wb, { type: 'array', bookType: 'xlsx' })
+            const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+            const url = URL.createObjectURL(blob)
+            const a = document.createElement('a'); a.href = url; a.download = `${title || 'untitled'}.xlsx`; a.click()
+            URL.revokeObjectURL(url)
+          }}
+          className="flex items-center gap-1.5 text-xs bg-[#1a1a1d] border border-[#2a2a2e] text-[#6b6b75] px-3 py-1.5 rounded-full hover:bg-[#2a2a2e] hover:text-[#34c972] transition-colors"
+          title="Export as Excel (.xlsx)"
+        >
+          <Download size={12} />
+          Excel
+        </button>
+
+        {/* Export as Word */}
+        <button
+          onClick={async () => {
+            const { Document, Paragraph, TextRun, HeadingLevel, Packer } = await import('docx')
+            const html = editor.getHTML()
+            const parser = new DOMParser()
+            const dom = parser.parseFromString(html, 'text/html')
+            const children: InstanceType<typeof Paragraph>[] = []
+            dom.body.childNodes.forEach(node => {
+              const el = node as HTMLElement
+              const text = el.textContent || ''
+              if (el.tagName === 'H1') children.push(new Paragraph({ text, heading: HeadingLevel.HEADING_1 }))
+              else if (el.tagName === 'H2') children.push(new Paragraph({ text, heading: HeadingLevel.HEADING_2 }))
+              else if (el.tagName === 'H3') children.push(new Paragraph({ text, heading: HeadingLevel.HEADING_3 }))
+              else if (text) children.push(new Paragraph({ children: [new TextRun(text)] }))
+            })
+            const doc = new Document({ sections: [{ children }] })
+            const buf = await Packer.toBlob(doc)
+            const url = URL.createObjectURL(buf)
+            const a = document.createElement('a'); a.href = url; a.download = `${title || 'untitled'}.docx`; a.click()
+            URL.revokeObjectURL(url)
+          }}
+          className="flex items-center gap-1.5 text-xs bg-[#1a1a1d] border border-[#2a2a2e] text-[#6b6b75] px-3 py-1.5 rounded-full hover:bg-[#2a2a2e] hover:text-[#60a5fa] transition-colors"
+          title="Export as Word (.docx)"
+        >
+          <Download size={12} />
+          Word
+        </button>
+
         {/* Export to Google Doc */}
         {googleExportState === 'done' && googleExportLink ? (
           <a
