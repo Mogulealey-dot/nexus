@@ -108,17 +108,20 @@ export async function GET() {
       })
     )
 
-    // Ask Claude to prioritize
-    const emailList = emails
-      .map((e, i) =>
-        `[${i + 1}] From: ${e.from}\n    Subject: ${e.subject}\n    Preview: ${e.snippet.slice(0, 120)}`
-      )
-      .join('\n\n')
+    // Ask Claude to prioritize (falls back to keyword-based if API unavailable)
+    let priorities: { index: number; priority: 'HIGH' | 'NORMAL' | 'LOW'; reason: string }[] = []
 
-    const { text } = await generateText({
-      model: anthropic('claude-haiku-4-5'),
-      maxOutputTokens: 2048,
-      prompt: `You are an email triage assistant. Categorize each email as HIGH, NORMAL, or LOW priority.
+    try {
+      const emailList = emails
+        .map((e, i) =>
+          `[${i + 1}] From: ${e.from}\n    Subject: ${e.subject}\n    Preview: ${e.snippet.slice(0, 120)}`
+        )
+        .join('\n\n')
+
+      const { text } = await generateText({
+        model: anthropic('claude-haiku-4-5'),
+        maxOutputTokens: 2048,
+        prompt: `You are an email triage assistant. Categorize each email as HIGH, NORMAL, or LOW priority.
 
 HIGH: Urgent action required, deadlines, security alerts, critical issues, direct requests needing a response.
 NORMAL: Informational updates, meeting invites, newsletters, non-urgent requests.
@@ -129,15 +132,26 @@ Return a JSON array only (no markdown, no explanation):
 
 Emails:
 ${emailList}`,
-    })
+      })
 
-    let priorities: { index: number; priority: 'HIGH' | 'NORMAL' | 'LOW'; reason: string }[] = []
-    try {
       const raw = text.trim()
       const jsonText = raw.startsWith('[') ? raw : raw.slice(raw.indexOf('['))
       priorities = JSON.parse(jsonText)
     } catch {
-      priorities = emails.map((_, i) => ({ index: i + 1, priority: 'NORMAL' as const, reason: 'Could not determine' }))
+      // Fallback: keyword-based prioritization
+      const HIGH_KEYWORDS = ['urgent', 'asap', 'immediately', 'deadline', 'alert', 'security', 'invoice', 'payment', 'action required', 'important']
+      const LOW_KEYWORDS  = ['unsubscribe', 'newsletter', 'promotion', 'sale', 'offer', 'deal', 'discount', 'marketing', 'noreply', 'no-reply', 'notification']
+
+      priorities = emails.map((e, i) => {
+        const text = `${e.subject} ${e.from} ${e.snippet}`.toLowerCase()
+        if (HIGH_KEYWORDS.some(k => text.includes(k))) {
+          return { index: i + 1, priority: 'HIGH' as const, reason: 'Keyword match' }
+        }
+        if (LOW_KEYWORDS.some(k => text.includes(k))) {
+          return { index: i + 1, priority: 'LOW' as const, reason: 'Keyword match' }
+        }
+        return { index: i + 1, priority: 'NORMAL' as const, reason: 'Default priority' }
+      })
     }
 
     // Merge emails with priorities and sort by ascending rank (HIGH=1, NORMAL=2, LOW=3)
