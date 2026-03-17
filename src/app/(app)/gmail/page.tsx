@@ -15,6 +15,7 @@ interface GmailEmail {
   priority: 'HIGH' | 'NORMAL' | 'LOW'
   reason: string
   rank: number
+  vip?: string
 }
 
 interface EmailsResponse {
@@ -332,6 +333,11 @@ export default function GmailPage() {
                             <span className="text-sm font-medium text-[#e8e8ed] truncate">
                               {formatFrom(email.from)}
                             </span>
+                            {email.vip && (
+                              <span className="flex-shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-[#f5a623]/15 text-[#f5a623] border border-[#f5a623]/25 uppercase tracking-wide">
+                                ★ VIP
+                              </span>
+                            )}
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <span className={`text-[10px] px-1.5 py-0.5 rounded-md border font-medium ${PRIORITY_CONFIG[email.priority].badge}`}>

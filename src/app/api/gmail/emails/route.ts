@@ -14,9 +14,22 @@ export interface GmailEmail {
   priority: 'HIGH' | 'NORMAL' | 'LOW'
   reason: string
   rank: number
+  vip?: string  // VIP label if sender matches a priority contact
 }
 
 const PRIORITY_ORDER = { HIGH: 1, NORMAL: 2, LOW: 3 }
+
+// VIP senders — always forced to HIGH priority
+const VIP_SENDERS = [
+  { match: 'edocs',              label: 'EDOCS' },
+  { match: 'joseph abuto',       label: 'Joseph Abuto' },
+  { match: 'janvier ndayambaje', label: 'Janvier Ndayambaje' },
+]
+
+function getVip(from: string): string | undefined {
+  const lower = from.toLowerCase()
+  return VIP_SENDERS.find(v => lower.includes(v.match))?.label
+}
 
 export async function GET() {
   const cookieStore = await cookies()
@@ -124,6 +137,7 @@ export async function GET() {
         prompt: `You are an email triage assistant. Categorize each email as HIGH, NORMAL, or LOW priority.
 
 HIGH: Urgent action required, deadlines, security alerts, critical issues, direct requests needing a response.
+      Always HIGH: any email from EDOCS, Joseph Abuto, or Janvier Ndayambaje — regardless of subject.
 NORMAL: Informational updates, meeting invites, newsletters, non-urgent requests.
 LOW: Promotions, marketing, social notifications, bulk mail.
 
@@ -154,15 +168,19 @@ ${emailList}`,
       })
     }
 
-    // Merge emails with priorities and sort by ascending rank (HIGH=1, NORMAL=2, LOW=3)
+    // Merge emails with priorities, apply VIP override, sort by ascending rank
     const ranked: GmailEmail[] = emails.map((email, i) => {
       const p = priorities.find(x => x.index === i + 1)
-      const priority = p?.priority ?? 'NORMAL'
+      const vip = getVip(email.from)
+      // VIP senders always win — force HIGH regardless of AI/keyword result
+      const priority = vip ? 'HIGH' : (p?.priority ?? 'NORMAL')
+      const reason = vip ? `Priority contact: ${vip}` : (p?.reason ?? '')
       return {
         ...email,
         priority,
-        reason: p?.reason ?? '',
+        reason,
         rank: PRIORITY_ORDER[priority],
+        vip,
       }
     })
 
