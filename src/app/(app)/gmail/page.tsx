@@ -3,7 +3,7 @@ export const dynamic = 'force-dynamic'
 
 import { useEffect, useState, useCallback } from 'react'
 import { useSearchParams } from 'next/navigation'
-import { Mail, RefreshCw, Unlink, AlertCircle, Inbox, ArrowUpRight } from 'lucide-react'
+import { Mail, RefreshCw, Unlink, AlertCircle, Inbox, ArrowUpRight, FileText, CheckSquare, Check } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 
 interface GmailEmail {
@@ -55,6 +55,10 @@ export default function GmailPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [savingNote, setSavingNote] = useState(false)
+  const [creatingTasks, setCreatingTasks] = useState(false)
+  const [savedNoteId, setSavedNoteId] = useState<string | null>(null)
+  const [tasksCreated, setTasksCreated] = useState<number | null>(null)
 
   const fetchEmails = useCallback(async () => {
     setLoading(true)
@@ -84,6 +88,42 @@ export default function GmailPage() {
 
   const handleConnect = () => {
     window.location.href = '/api/gmail/auth'
+  }
+
+  const handleSaveNote = async () => {
+    setSavingNote(true)
+    setSavedNoteId(null)
+    try {
+      const res = await fetch('/api/gmail/save-note', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emails }),
+      })
+      const data = await res.json()
+      if (data.docId) setSavedNoteId(data.docId)
+    } catch {
+      setError('Failed to save note')
+    } finally {
+      setSavingNote(false)
+    }
+  }
+
+  const handleCreateTasks = async () => {
+    setCreatingTasks(true)
+    setTasksCreated(null)
+    try {
+      const res = await fetch('/api/gmail/create-tasks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ emails }),
+      })
+      const data = await res.json()
+      if (data.created) setTasksCreated(data.created)
+    } catch {
+      setError('Failed to create tasks')
+    } finally {
+      setCreatingTasks(false)
+    }
   }
 
   const handleDisconnect = async () => {
@@ -121,7 +161,27 @@ export default function GmailPage() {
         </div>
 
         {connected && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            {emails.length > 0 && (
+              <>
+                <button
+                  onClick={handleSaveNote}
+                  disabled={savingNote}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-[#7c6af7]/10 text-[#7c6af7] border border-[#7c6af7]/20 hover:bg-[#7c6af7]/20 transition-colors disabled:opacity-50"
+                >
+                  {savedNoteId ? <Check size={12} /> : <FileText size={12} />}
+                  {savingNote ? 'Saving…' : savedNoteId ? 'Note Saved!' : 'Save as Note'}
+                </button>
+                <button
+                  onClick={handleCreateTasks}
+                  disabled={creatingTasks}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs bg-[#34c972]/10 text-[#34c972] border border-[#34c972]/20 hover:bg-[#34c972]/20 transition-colors disabled:opacity-50"
+                >
+                  {tasksCreated ? <Check size={12} /> : <CheckSquare size={12} />}
+                  {creatingTasks ? 'Creating…' : tasksCreated ? `${tasksCreated} Tasks Created!` : 'Create Tasks'}
+                </button>
+              </>
+            )}
             <button
               onClick={fetchEmails}
               disabled={loading}
@@ -147,6 +207,22 @@ export default function GmailPage() {
         <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-lg bg-[#f56565]/10 border border-[#f56565]/20 text-[#f56565] text-sm">
           <AlertCircle size={14} />
           {oauthError === 'access_denied' ? 'Gmail access was denied.' : 'Failed to connect Gmail. Please try again.'}
+        </div>
+      )}
+
+      {/* Saved note banner */}
+      {savedNoteId && (
+        <div className="mb-4 flex items-center justify-between px-4 py-3 rounded-lg bg-[#7c6af7]/10 border border-[#7c6af7]/20 text-[#7c6af7] text-sm">
+          <span>Note saved successfully!</span>
+          <a href={`/docs/${savedNoteId}`} className="underline text-xs hover:text-[#9080ff]">Open note →</a>
+        </div>
+      )}
+
+      {/* Tasks created banner */}
+      {tasksCreated && (
+        <div className="mb-4 flex items-center justify-between px-4 py-3 rounded-lg bg-[#34c972]/10 border border-[#34c972]/20 text-[#34c972] text-sm">
+          <span>{tasksCreated} tasks created from your emails!</span>
+          <a href="/tasks" className="underline text-xs hover:text-[#34c972]/80">View tasks →</a>
         </div>
       )}
 
