@@ -1014,7 +1014,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
         </div>
       )}
 
-      <div className="fixed bottom-6 right-6 flex items-center gap-3 flex-wrap justify-end max-w-[calc(100vw-2rem)]">
+      <div className="fixed bottom-6 right-3 md:right-6 flex items-center gap-1.5 md:gap-3 flex-wrap justify-end max-w-[calc(100vw-1rem)] md:max-w-[calc(100vw-2rem)]">
         {/* Feature 15 — TOC button */}
         <button
           onClick={() => setShowTOC(v => !v)}
@@ -1024,7 +1024,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="Table of contents"
         >
           <List size={12} />
-          TOC
+          <span className="hidden sm:inline">TOC</span>
         </button>
 
         {/* Feature 9 — Math button */}
@@ -1034,7 +1034,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="Insert math equation (KaTeX)"
         >
           <span className="text-[11px] font-mono">∑</span>
-          Math
+          <span className="hidden sm:inline">Math</span>
         </button>
 
         {/* Feature 13 — Share button */}
@@ -1046,7 +1046,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="Share note"
         >
           <Share2 size={12} />
-          {isPublic ? 'Shared' : 'Share'}
+          <span className="hidden sm:inline">{isPublic ? 'Shared' : 'Share'}</span>
         </button>
 
         {/* Feature 12 — Related Notes button */}
@@ -1058,7 +1058,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="Find related notes"
         >
           <Link2 size={12} />
-          Related
+          <span className="hidden sm:inline">Related</span>
         </button>
 
         <button
@@ -1088,7 +1088,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="Export as Markdown"
         >
           <Download size={12} />
-          Export .md
+          <span className="hidden sm:inline">Export .md</span>
         </button>
 
         {/* Export as Excel */}
@@ -1110,7 +1110,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="Export as Excel (.xlsx)"
         >
           <Download size={12} />
-          Excel
+          <span className="hidden sm:inline">Excel</span>
         </button>
 
         {/* Export as Word */}
@@ -1139,7 +1139,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="Export as Word (.docx)"
         >
           <Download size={12} />
-          Word
+          <span className="hidden sm:inline">Word</span>
         </button>
 
         {/* Export to Google Doc */}
@@ -1151,7 +1151,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
             className="flex items-center gap-1.5 text-xs bg-[#34c972]/10 border border-[#34c972]/30 text-[#34c972] px-3 py-1.5 rounded-full hover:bg-[#34c972]/20 transition-colors"
           >
             <FileText size={12} />
-            Open in Docs ↗
+            <span className="hidden sm:inline">Open in Docs ↗</span>
           </a>
         ) : (
           <button
@@ -1181,7 +1181,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
             title="Export to Google Docs"
           >
             <FileText size={12} className={googleExportState === 'exporting' ? 'animate-pulse' : ''} />
-            {googleExportState === 'exporting' ? 'Exporting…' : 'Google Doc'}
+            <span className="hidden sm:inline">{googleExportState === 'exporting' ? 'Exporting…' : 'Google Doc'}</span>
           </button>
         )}
         <button
@@ -1192,7 +1192,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="Note statistics"
         >
           <BarChart2 size={12} />
-          {wordCount} words
+          <span className="hidden sm:inline">{wordCount} words</span>
         </button>
         <button
           onClick={() => setIsReadMode(v => !v)}
@@ -1202,16 +1202,16 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="Toggle reading mode"
         >
           {isReadMode ? <Edit3 size={12} /> : <BookOpen size={12} />}
-          {isReadMode ? 'Edit' : 'Read'}
+          <span className="hidden sm:inline">{isReadMode ? 'Edit' : 'Read'}</span>
         </button>
         <div className={cn(
           'flex items-center gap-1.5 text-xs transition-colors',
           saveStatus === 'saved' ? 'text-[#34c972]' : saveStatus === 'saving' ? 'text-[#f5a623]' : 'text-[#4a4a55]'
         )}>
           <div className={cn('w-1.5 h-1.5 rounded-full', saveStatus === 'saving' && 'animate-pulse', saveStatus === 'saved' ? 'bg-[#34c972]' : saveStatus === 'saving' ? 'bg-[#f5a623]' : 'bg-[#4a4a55]')} />
-          {saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved'}
+          <span className="hidden sm:inline">{saveStatus === 'saved' ? 'Saved' : saveStatus === 'saving' ? 'Saving…' : 'Unsaved'}</span>
         </div>
-        <span className="text-xs text-[#3a3a3f] tabular-nums select-none" title={`${charCount} characters`}>
+        <span className="hidden sm:inline text-xs text-[#3a3a3f] tabular-nums select-none" title={`${charCount} characters`}>
           {wordCount} words · {readTime} min read
         </span>
         <button
@@ -1221,7 +1221,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="Upload image (or drag & drop)"
         >
           <ImagePlus size={12} />
-          {isUploadingImage ? 'Uploading…' : 'Image'}
+          <span className="hidden sm:inline">{isUploadingImage ? 'Uploading…' : 'Image'}</span>
         </button>
         {isSpeechSupported && (
           <button
@@ -1235,7 +1235,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
             title="Voice dictation (click to start/stop)"
           >
             {isRecording ? <MicOff size={12} /> : <Mic size={12} />}
-            {isRecording ? 'Stop' : 'Dictate'}
+            <span className="hidden sm:inline">{isRecording ? 'Stop' : 'Dictate'}</span>
           </button>
         )}
         <button
@@ -1245,7 +1245,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="Summarize this note with AI"
         >
           <FileText size={12} />
-          {isSummarizing ? 'Summarizing…' : 'Summarize'}
+          <span className="hidden sm:inline">{isSummarizing ? 'Summarizing…' : 'Summarize'}</span>
         </button>
         <button
           onClick={() => { setShowHistory(h => !h); if (!showHistory) loadVersions() }}
@@ -1256,7 +1256,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="View version history"
         >
           <History size={12} />
-          History
+          <span className="hidden sm:inline">History</span>
         </button>
         <button
           onClick={triggerAI}
@@ -1264,7 +1264,7 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           className="flex items-center gap-1.5 text-xs bg-[#1a1a1d] border border-[#2a2a2e] text-[#7c6af7] px-3 py-1.5 rounded-full hover:bg-[#2a2a2e] transition-colors disabled:opacity-50"
         >
           <Sparkles size={12} />
-          {isGenerating ? 'Writing…' : 'AI Complete'}
+          <span className="hidden sm:inline">{isGenerating ? 'Writing…' : 'AI Complete'}</span>
         </button>
       </div>
 

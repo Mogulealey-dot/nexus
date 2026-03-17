@@ -11,7 +11,7 @@ import CommandPalette from '@/components/command-palette/CommandPalette'
 import AIChatPanel from '@/components/ai/AIChatPanel'
 import ShortcutsModal from '@/components/ShortcutsModal'
 import KnowledgeGraph from '@/components/KnowledgeGraph'
-import { WifiOff, Sparkles } from 'lucide-react'
+import { WifiOff, Sparkles, Home, CheckSquare, Mail, CalendarDays } from 'lucide-react'
 import { AnimatePresence, motion } from 'framer-motion'
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
@@ -105,7 +105,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         onReorderDoc={reorderDoc}
       />
 
-      <main className="flex-1 overflow-y-auto">{children}</main>
+      <main className="flex-1 overflow-y-auto pb-16 md:pb-0">{children}</main>
 
       <AIChatPanel docs={docs} currentPageTitle={currentPageTitle} />
 
@@ -121,7 +121,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.8, opacity: 0 }}
             onClick={toggleChat}
-            className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-[#7c6af7] hover:bg-[#9080ff] text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg shadow-[#7c6af7]/25 transition-colors"
+            className="fixed bottom-20 md:bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-2 bg-[#7c6af7] hover:bg-[#9080ff] text-white text-xs font-semibold px-4 py-2.5 rounded-full shadow-lg shadow-[#7c6af7]/25 transition-colors"
           >
             <Sparkles size={13} />
             Ask Nexus AI
@@ -147,6 +147,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Mobile bottom navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-[#0d0d0f] border-t border-[#1e1e22] flex items-center justify-around px-2 pb-safe">
+        {[
+          { href: '/', icon: <Home size={20} />, label: 'Home' },
+          { href: '/tasks', icon: <CheckSquare size={20} />, label: 'Tasks' },
+          { href: '/gmail', icon: <Mail size={20} />, label: 'Gmail' },
+          { href: '/calendar', icon: <CalendarDays size={20} />, label: 'Calendar' },
+        ].map(item => (
+          <button
+            key={item.href}
+            onClick={() => router.push(item.href)}
+            className={`flex flex-col items-center gap-0.5 py-3 px-4 transition-colors ${
+              pathname === item.href ? 'text-[#7c6af7]' : 'text-[#4a4a55]'
+            }`}
+          >
+            {item.icon}
+            <span className="text-[10px] font-medium">{item.label}</span>
+          </button>
+        ))}
+      </nav>
     </div>
   )
 }

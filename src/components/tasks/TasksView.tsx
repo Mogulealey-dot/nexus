@@ -186,7 +186,7 @@ export default function TasksView({ tasks, todayTasks, upcomingTasks, overdueTas
   const sharedProps = { onToggle, onDelete, onUpdate }
 
   return (
-    <div className="max-w-3xl mx-auto px-8 py-12">
+    <div className="max-w-3xl mx-auto px-4 py-8 sm:px-8 sm:py-12">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>
@@ -214,7 +214,7 @@ export default function TasksView({ tasks, todayTasks, upcomingTasks, overdueTas
             onChange={e => setNewTitle(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') handleCreate(); if (e.key === 'Escape') setShowForm(false) }}
           />
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-1.5 text-[#4a4a55]">
               <Calendar size={13} />
               <input

@@ -145,7 +145,7 @@ export default function GSheetsPage() {
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto px-8 py-12 flex items-center justify-center min-h-[60vh]">
+      <div className="max-w-4xl mx-auto px-4 py-8 sm:px-8 sm:py-12 flex items-center justify-center min-h-[60vh]">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-[#141416] border border-[#1e1e22] flex items-center justify-center animate-pulse">
             <Sheet size={20} className="text-[#34c972]" />
@@ -158,7 +158,7 @@ export default function GSheetsPage() {
 
   if (!data?.connected) {
     return (
-      <div className="max-w-3xl mx-auto px-8 py-12 flex items-center justify-center min-h-[60vh]">
+      <div className="max-w-3xl mx-auto px-4 py-8 sm:px-8 sm:py-12 flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="w-16 h-16 rounded-3xl bg-[#141416] border border-[#1e1e22] flex items-center justify-center mx-auto mb-4">
             <Sheet size={28} className="text-[#34c972]" />
@@ -181,7 +181,7 @@ export default function GSheetsPage() {
 
   if (data.insufficientScopes) {
     return (
-      <div className="max-w-3xl mx-auto px-8 py-12 flex items-center justify-center min-h-[60vh]">
+      <div className="max-w-3xl mx-auto px-4 py-8 sm:px-8 sm:py-12 flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="w-16 h-16 rounded-3xl bg-[#f56565]/10 border border-[#f56565]/20 flex items-center justify-center mx-auto mb-4">
             <AlertCircle size={28} className="text-[#f56565]" />
@@ -206,7 +206,7 @@ export default function GSheetsPage() {
   // Sheet data preview panel
   if (selected) {
     return (
-      <div className="max-w-5xl mx-auto px-8 py-12">
+      <div className="max-w-5xl mx-auto px-4 py-8 sm:px-8 sm:py-12">
         <div className="flex items-center gap-3 mb-8">
           <button
             onClick={() => { setSelected(null); setSheetData(null) }}
@@ -258,7 +258,7 @@ export default function GSheetsPage() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-8 py-12">
+    <div className="max-w-3xl mx-auto px-4 py-8 sm:px-8 sm:py-12">
       <div className="flex items-center justify-between mb-8">
         <div>
           <h1 className="text-2xl font-bold text-[#e8e8ed]">Google Sheets</h1>
@@ -301,7 +301,7 @@ export default function GSheetsPage() {
                   {file.owner && <span className="text-xs text-[#3a3a3f] truncate">{file.owner}</span>}
                 </div>
               </div>
-              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 flex-shrink-0 transition-opacity">
+              <div className="flex items-center gap-1 flex-shrink-0 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                 <button
                   onClick={(e) => importToNexus(file, e)}
                   disabled={importing === file.id}

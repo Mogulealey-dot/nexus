@@ -146,7 +146,7 @@ export default function GmailPage() {
   const lowEmails    = emails.filter(e => e.priority === 'LOW')
 
   return (
-    <div className="min-h-screen bg-[#0d0d0f] px-6 py-8 max-w-3xl mx-auto">
+    <div className="min-h-screen bg-[#0d0d0f] px-4 py-6 sm:px-6 sm:py-8 max-w-3xl mx-auto">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">

@@ -55,7 +55,7 @@ export default function GoogleTasksPage() {
 
   if (loading) {
     return (
-      <div className="max-w-3xl mx-auto px-8 py-12 flex items-center justify-center min-h-[60vh]">
+      <div className="max-w-3xl mx-auto px-4 py-8 sm:px-8 sm:py-12 flex items-center justify-center min-h-[60vh]">
         <div className="flex flex-col items-center gap-4">
           <div className="w-12 h-12 rounded-2xl bg-[#141416] border border-[#1e1e22] flex items-center justify-center animate-pulse">
             <CheckSquare size={20} className="text-[#7c6af7]" />
@@ -68,7 +68,7 @@ export default function GoogleTasksPage() {
 
   if (!data?.connected) {
     return (
-      <div className="max-w-3xl mx-auto px-8 py-12 flex items-center justify-center min-h-[60vh]">
+      <div className="max-w-3xl mx-auto px-4 py-8 sm:px-8 sm:py-12 flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="w-16 h-16 rounded-3xl bg-[#141416] border border-[#1e1e22] flex items-center justify-center mx-auto mb-4">
             <CheckSquare size={28} className="text-[#7c6af7]" />
@@ -91,7 +91,7 @@ export default function GoogleTasksPage() {
 
   if (data.insufficientScopes) {
     return (
-      <div className="max-w-3xl mx-auto px-8 py-12 flex items-center justify-center min-h-[60vh]">
+      <div className="max-w-3xl mx-auto px-4 py-8 sm:px-8 sm:py-12 flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
           <div className="w-16 h-16 rounded-3xl bg-[#f56565]/10 border border-[#f56565]/20 flex items-center justify-center mx-auto mb-4">
             <AlertCircle size={28} className="text-[#f56565]" />
@@ -115,7 +115,7 @@ export default function GoogleTasksPage() {
   const totalTasks = lists.reduce((sum, l) => sum + l.items.length, 0)
 
   return (
-    <div className="max-w-3xl mx-auto px-8 py-12">
+    <div className="max-w-3xl mx-auto px-4 py-8 sm:px-8 sm:py-12">
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div>

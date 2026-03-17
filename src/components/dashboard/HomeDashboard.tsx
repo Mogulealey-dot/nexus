@@ -73,7 +73,7 @@ export default function HomeDashboard({ user, docs, starred, recent, onCreateDoc
   const today = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
 
   return (
-    <div className="max-w-4xl mx-auto px-8 py-12">
+    <div className="max-w-4xl mx-auto px-4 py-8 sm:px-8 sm:py-12">
 
       {/* Header */}
       <div className="mb-10">
@@ -109,7 +109,7 @@ export default function HomeDashboard({ user, docs, starred, recent, onCreateDoc
           <Plus size={14} className="text-[#7c6af7]" />
           <span className="text-xs font-semibold text-[#6b6b75] uppercase tracking-wider">Quick capture</span>
         </div>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           <input
             className="flex-1 bg-[#0d0d0f] border border-[#2a2a2e] rounded-xl px-4 py-2.5 text-sm text-[#e8e8ed] placeholder-[#3a3a3f] outline-none focus:border-[#7c6af7]/50 transition-colors"
             placeholder="What's on your mind? Press Enter to create a note…"
@@ -120,7 +120,7 @@ export default function HomeDashboard({ user, docs, starred, recent, onCreateDoc
           <button
             onClick={handleQuickCreate}
             disabled={creating}
-            className="flex items-center gap-2 bg-[#7c6af7] text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#9080ff] transition-colors disabled:opacity-50 flex-shrink-0"
+            className="flex items-center justify-center gap-2 bg-[#7c6af7] text-white px-4 py-2.5 rounded-xl text-sm font-semibold hover:bg-[#9080ff] transition-colors disabled:opacity-50"
           >
             <Plus size={14} />
             New page
@@ -166,9 +166,9 @@ export default function HomeDashboard({ user, docs, starred, recent, onCreateDoc
         </div>
       )}
 
-      <div className="grid grid-cols-5 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
         {/* Recent pages — left 3 columns */}
-        <div className="col-span-3">
+        <div className="md:col-span-3">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <Clock size={13} className="text-[#4a4a55]" />
@@ -207,7 +207,7 @@ export default function HomeDashboard({ user, docs, starred, recent, onCreateDoc
         </div>
 
         {/* Right sidebar — starred + templates */}
-        <div className="col-span-2 space-y-6">
+        <div className="md:col-span-2 space-y-6">
 
           {/* Starred */}
           {starred.length > 0 && (
