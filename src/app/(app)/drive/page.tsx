@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { HardDrive, RefreshCw, Search, ExternalLink, AlertCircle, FileText, FileImage, FileVideo, FileCode, FolderOpen, Sheet } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { HardDrive, RefreshCw, Search, ExternalLink, AlertCircle, FileText, FileImage, FileVideo, FileCode, FolderOpen, Sheet, Download, Loader2 } from 'lucide-react'
 
 interface DriveFile {
   id: string
@@ -63,11 +64,21 @@ function getMimeLabel(mimeType: string) {
   return 'File'
 }
 
+function isImportable(mimeType: string) {
+  return (
+    mimeType.startsWith('text/') ||
+    mimeType.includes('markdown') ||
+    mimeType === 'application/vnd.google-apps.document'
+  )
+}
+
 export default function DrivePage() {
+  const router = useRouter()
   const [data, setData] = useState<ApiResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
+  const [importing, setImporting] = useState<string | null>(null)
 
   const fetchFiles = useCallback(async (q = '') => {
     q ? setSearching(true) : setLoading(true)
@@ -88,6 +99,27 @@ export default function DrivePage() {
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
     fetchFiles(query)
+  }
+
+  const importToNexus = async (file: DriveFile) => {
+    setImporting(file.id)
+    try {
+      const res = await fetch(`/api/google/drive?id=${file.id}&download=1`)
+      const json = await res.json()
+      if (!json.text && json.error) throw new Error(json.error)
+
+      const importRes = await fetch('/api/nexus/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: file.name.replace(/\.(md|txt)$/i, ''), text: json.text, source: 'Google Drive', icon: '📄' }),
+      })
+      const { docId } = await importRes.json()
+      if (docId) router.push(`/docs/${docId}`)
+    } catch {
+      // fail silently
+    } finally {
+      setImporting(null)
+    }
   }
 
   if (loading) {
@@ -223,17 +255,30 @@ export default function DrivePage() {
                   {file.owner && <span className="text-xs text-[#3a3a3f] truncate">{file.owner}</span>}
                 </div>
               </div>
-              {file.webViewLink && (
-                <a
-                  href={file.webViewLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-lg text-[#4a4a55] hover:text-[#7c6af7] hover:bg-[#7c6af7]/10 transition-all flex-shrink-0"
-                  title="Open in Drive"
-                >
-                  <ExternalLink size={13} />
-                </a>
-              )}
+              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 flex-shrink-0 transition-opacity">
+                {isImportable(file.mimeType) && (
+                  <button
+                    onClick={() => importToNexus(file)}
+                    disabled={importing === file.id}
+                    className="flex items-center gap-1 text-[10px] bg-[#7c6af7]/10 border border-[#7c6af7]/20 text-[#7c6af7] px-2 py-1 rounded-lg hover:bg-[#7c6af7]/20 transition-colors disabled:opacity-50"
+                    title="Import to Nexus"
+                  >
+                    {importing === file.id ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
+                    Import
+                  </button>
+                )}
+                {file.webViewLink && (
+                  <a
+                    href={file.webViewLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-[#4a4a55] hover:text-[#7c6af7] hover:bg-[#7c6af7]/10 transition-all"
+                    title="Open in Drive"
+                  >
+                    <ExternalLink size={13} />
+                  </a>
+                )}
+              </div>
             </div>
           ))}
         </div>

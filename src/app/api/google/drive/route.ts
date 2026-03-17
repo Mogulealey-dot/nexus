@@ -56,9 +56,34 @@ export async function GET(request: Request) {
 
   const { searchParams } = new URL(request.url)
   const query = searchParams.get('q') || ''
+  const fileId = searchParams.get('id')
+  const download = searchParams.get('download') === '1'
 
   try {
     const drive = google.drive({ version: 'v3', auth: oAuth2 })
+
+    // Download the text content of a specific file
+    if (fileId && download) {
+      // Get file metadata first to check mimeType
+      const meta = await drive.files.get({ fileId, fields: 'id,name,mimeType' })
+      const mimeType = meta.data.mimeType || ''
+
+      let text = ''
+      if (mimeType === 'application/vnd.google-apps.document') {
+        // Export Google Doc as plain text
+        const res = await drive.files.export({ fileId, mimeType: 'text/plain' })
+        text = res.data as string
+      } else if (mimeType.startsWith('text/') || mimeType.includes('markdown')) {
+        // Download raw text file using axios-style responseType
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const res = await (drive.files.get as any)({ fileId, alt: 'media' }, { responseType: 'text' })
+        text = typeof res.data === 'string' ? res.data : JSON.stringify(res.data)
+      } else {
+        return Response.json({ error: 'File type cannot be imported as text' }, { status: 400 })
+      }
+
+      return Response.json({ connected: true, name: meta.data.name, text })
+    }
 
     const q = query
       ? `fullText contains '${query.replace(/'/g, "\\'")}' and trashed = false`

@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { FileText, RefreshCw, ExternalLink, AlertCircle, ChevronLeft, Loader2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { FileText, RefreshCw, ExternalLink, AlertCircle, ChevronLeft, Loader2, Download } from 'lucide-react'
 
 interface GDoc {
   id: string
@@ -40,11 +41,13 @@ function formatModifiedTime(iso: string) {
 }
 
 export default function GDocsPage() {
+  const router = useRouter()
   const [data, setData] = useState<ListResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<GDoc | null>(null)
   const [docContent, setDocContent] = useState<DocContent | null>(null)
   const [contentLoading, setContentLoading] = useState(false)
+  const [importing, setImporting] = useState<string | null>(null) // file id being imported
 
   const fetchDocs = useCallback(async () => {
     setLoading(true)
@@ -72,6 +75,30 @@ export default function GDocsPage() {
       // fail silently — user can still open in Google Docs
     } finally {
       setContentLoading(false)
+    }
+  }
+
+  const importToNexus = async (doc: GDoc, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setImporting(doc.id)
+    try {
+      // Fetch doc content
+      const contentRes = await fetch(`/api/google/docs?id=${doc.id}`)
+      const contentJson: ContentResponse = await contentRes.json()
+      if (!contentJson.doc) throw new Error('Could not read document content')
+
+      // Create Nexus note
+      const importRes = await fetch('/api/nexus/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: doc.name, text: contentJson.doc.text, source: 'Google Docs', icon: '📄' }),
+      })
+      const { docId } = await importRes.json()
+      if (docId) router.push(`/docs/${docId}`)
+    } catch {
+      // fail silently
+    } finally {
+      setImporting(null)
     }
   }
 
@@ -230,18 +257,29 @@ export default function GDocsPage() {
                   {file.owner && <span className="text-xs text-[#3a3a3f] truncate">{file.owner}</span>}
                 </div>
               </div>
-              {file.webViewLink && (
-                <a
-                  href={file.webViewLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={e => e.stopPropagation()}
-                  className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-lg text-[#4a4a55] hover:text-[#4a90d9] hover:bg-[#4a90d9]/10 transition-all flex-shrink-0"
-                  title="Open in Google Docs"
+              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 flex-shrink-0 transition-opacity">
+                <button
+                  onClick={(e) => importToNexus(file, e)}
+                  disabled={importing === file.id}
+                  className="flex items-center gap-1 text-[10px] bg-[#7c6af7]/10 border border-[#7c6af7]/20 text-[#7c6af7] px-2 py-1 rounded-lg hover:bg-[#7c6af7]/20 transition-colors disabled:opacity-50"
+                  title="Import to Nexus"
                 >
-                  <ExternalLink size={13} />
-                </a>
-              )}
+                  {importing === file.id ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
+                  Import
+                </button>
+                {file.webViewLink && (
+                  <a
+                    href={file.webViewLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-[#4a4a55] hover:text-[#4a90d9] hover:bg-[#4a90d9]/10 transition-all"
+                    title="Open in Google Docs"
+                  >
+                    <ExternalLink size={13} />
+                  </a>
+                )}
+              </div>
             </div>
           ))}
         </div>

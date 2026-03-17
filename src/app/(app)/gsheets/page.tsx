@@ -1,6 +1,7 @@
 'use client'
 import { useState, useEffect, useCallback } from 'react'
-import { Sheet, RefreshCw, ExternalLink, AlertCircle, ChevronLeft, Loader2 } from 'lucide-react'
+import { useRouter } from 'next/navigation'
+import { Sheet, RefreshCw, ExternalLink, AlertCircle, ChevronLeft, Loader2, Download } from 'lucide-react'
 
 interface GSheet {
   id: string
@@ -80,11 +81,13 @@ function SheetTable({ rows }: { rows: string[][] }) {
 }
 
 export default function GSheetsPage() {
+  const router = useRouter()
   const [data, setData] = useState<ListResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<GSheet | null>(null)
   const [sheetData, setSheetData] = useState<SheetData | null>(null)
   const [contentLoading, setContentLoading] = useState(false)
+  const [importing, setImporting] = useState<string | null>(null)
 
   const fetchSheets = useCallback(async () => {
     setLoading(true)
@@ -112,6 +115,31 @@ export default function GSheetsPage() {
       // fail silently
     } finally {
       setContentLoading(false)
+    }
+  }
+
+  const importToNexus = async (sheet: GSheet, e: React.MouseEvent) => {
+    e.stopPropagation()
+    setImporting(sheet.id)
+    try {
+      const contentRes = await fetch(`/api/google/sheets?id=${sheet.id}`)
+      const contentJson: ContentResponse = await contentRes.json()
+      if (!contentJson.sheet) throw new Error('Could not read sheet content')
+
+      // Convert rows to tab-separated text
+      const text = contentJson.sheet.rows.map(row => row.join('\t')).join('\n')
+
+      const importRes = await fetch('/api/nexus/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title: sheet.name, text, source: 'Google Sheets', icon: '📊' }),
+      })
+      const { docId } = await importRes.json()
+      if (docId) router.push(`/docs/${docId}`)
+    } catch {
+      // fail silently
+    } finally {
+      setImporting(null)
     }
   }
 
@@ -273,18 +301,29 @@ export default function GSheetsPage() {
                   {file.owner && <span className="text-xs text-[#3a3a3f] truncate">{file.owner}</span>}
                 </div>
               </div>
-              {file.webViewLink && (
-                <a
-                  href={file.webViewLink}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={e => e.stopPropagation()}
-                  className="opacity-0 group-hover:opacity-100 w-7 h-7 flex items-center justify-center rounded-lg text-[#4a4a55] hover:text-[#34c972] hover:bg-[#34c972]/10 transition-all flex-shrink-0"
-                  title="Open in Google Sheets"
+              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-1 flex-shrink-0 transition-opacity">
+                <button
+                  onClick={(e) => importToNexus(file, e)}
+                  disabled={importing === file.id}
+                  className="flex items-center gap-1 text-[10px] bg-[#7c6af7]/10 border border-[#7c6af7]/20 text-[#7c6af7] px-2 py-1 rounded-lg hover:bg-[#7c6af7]/20 transition-colors disabled:opacity-50"
+                  title="Import to Nexus"
                 >
-                  <ExternalLink size={13} />
-                </a>
-              )}
+                  {importing === file.id ? <Loader2 size={10} className="animate-spin" /> : <Download size={10} />}
+                  Import
+                </button>
+                {file.webViewLink && (
+                  <a
+                    href={file.webViewLink}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    onClick={e => e.stopPropagation()}
+                    className="w-7 h-7 flex items-center justify-center rounded-lg text-[#4a4a55] hover:text-[#34c972] hover:bg-[#34c972]/10 transition-all"
+                    title="Open in Google Sheets"
+                  >
+                    <ExternalLink size={13} />
+                  </a>
+                )}
+              </div>
             </div>
           ))}
         </div>

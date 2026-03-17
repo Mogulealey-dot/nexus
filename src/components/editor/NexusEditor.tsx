@@ -308,6 +308,8 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
   // Feature 15 — TOC
   const [showTOC, setShowTOC] = useState(false)
   const [tocHeadings, setTocHeadings] = useState<TOCHeading[]>([])
+  const [googleExportState, setGoogleExportState] = useState<'idle' | 'exporting' | 'done'>('idle')
+  const [googleExportLink, setGoogleExportLink] = useState<string | null>(null)
 
   const handleVoiceTranscript = useCallback((text: string) => {
     if (!editorRef.current) return
@@ -1086,8 +1088,51 @@ function EditorInner({ docId, initialTitle, initialTags, initialIcon, initialIsP
           title="Export as Markdown"
         >
           <Download size={12} />
-          Export
+          Export .md
         </button>
+
+        {/* Export to Google Doc */}
+        {googleExportState === 'done' && googleExportLink ? (
+          <a
+            href={googleExportLink}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 text-xs bg-[#34c972]/10 border border-[#34c972]/30 text-[#34c972] px-3 py-1.5 rounded-full hover:bg-[#34c972]/20 transition-colors"
+          >
+            <FileText size={12} />
+            Open in Docs ↗
+          </a>
+        ) : (
+          <button
+            onClick={async () => {
+              if (!editor) return
+              setGoogleExportState('exporting')
+              try {
+                const res = await fetch('/api/google/export/doc', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ title, html: editor.getHTML() }),
+                })
+                const json = await res.json()
+                if (json.webViewLink) {
+                  setGoogleExportLink(json.webViewLink)
+                  setGoogleExportState('done')
+                  setTimeout(() => setGoogleExportState('idle'), 10000)
+                } else {
+                  setGoogleExportState('idle')
+                }
+              } catch {
+                setGoogleExportState('idle')
+              }
+            }}
+            disabled={googleExportState === 'exporting'}
+            className="flex items-center gap-1.5 text-xs bg-[#1a1a1d] border border-[#2a2a2e] text-[#6b6b75] px-3 py-1.5 rounded-full hover:bg-[#2a2a2e] hover:text-[#a0a0aa] transition-colors disabled:opacity-50"
+            title="Export to Google Docs"
+          >
+            <FileText size={12} className={googleExportState === 'exporting' ? 'animate-pulse' : ''} />
+            {googleExportState === 'exporting' ? 'Exporting…' : 'Google Doc'}
+          </button>
+        )}
         <button
           onClick={() => setShowStats(v => !v)}
           className={cn('flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-full border transition-colors',
