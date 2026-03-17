@@ -1,7 +1,7 @@
 'use client'
 import { useState, useRef } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-import { Search, Plus, ChevronLeft, Sparkles, Star, CheckSquare, Home, Trash2, RotateCcw, X, ChevronDown, Calendar, Network, Upload, Mail } from 'lucide-react'
+import { Search, Plus, ChevronLeft, Sparkles, Star, CheckSquare, Home, Trash2, RotateCcw, X, ChevronDown, Calendar, Network, Upload, Mail, CalendarDays, HardDrive } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useAppStore } from '@/store/appStore'
 import DocTreeItem from './DocTreeItem'
@@ -189,6 +189,24 @@ export default function AppSidebar({ user, tree, docs, archivedDocs, onSignOut, 
                 className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${pathname === '/gmail' ? 'bg-[#7c6af7]/15 text-[#e8e8ed]' : 'text-[#6b6b75] hover:bg-[#1e1e22] hover:text-[#a0a0aa]'}`}
               >
                 <Mail size={14} /> Gmail
+              </button>
+              <button
+                onClick={() => router.push('/calendar')}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${pathname === '/calendar' ? 'bg-[#7c6af7]/15 text-[#e8e8ed]' : 'text-[#6b6b75] hover:bg-[#1e1e22] hover:text-[#a0a0aa]'}`}
+              >
+                <CalendarDays size={14} /> Calendar
+              </button>
+              <button
+                onClick={() => router.push('/drive')}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${pathname === '/drive' ? 'bg-[#7c6af7]/15 text-[#e8e8ed]' : 'text-[#6b6b75] hover:bg-[#1e1e22] hover:text-[#a0a0aa]'}`}
+              >
+                <HardDrive size={14} /> Drive
+              </button>
+              <button
+                onClick={() => router.push('/google-tasks')}
+                className={`w-full flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition-colors ${pathname === '/google-tasks' ? 'bg-[#7c6af7]/15 text-[#e8e8ed]' : 'text-[#6b6b75] hover:bg-[#1e1e22] hover:text-[#a0a0aa]'}`}
+              >
+                <CheckSquare size={14} /> Google Tasks
               </button>
             </div>
 

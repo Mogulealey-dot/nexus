@@ -43,8 +43,9 @@ function formatDate(dateStr: string | null) {
   return { label: new Date(dateStr + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' }), color: 'text-[#6b6b75]' }
 }
 
-function TaskRow({ task, onToggle, onDelete, onUpdate }: {
+function TaskRow({ task, num, onToggle, onDelete, onUpdate }: {
   task: Task
+  num?: number
   onToggle: (id: string) => void
   onDelete: (id: string) => void
   onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'completed' | 'due_date' | 'priority'>>) => void
@@ -60,6 +61,12 @@ function TaskRow({ task, onToggle, onDelete, onUpdate }: {
         ? 'bg-[#0d0d0f] border-[#1a1a1d] opacity-50'
         : 'bg-[#141416] border-[#1e1e22] hover:border-[#2a2a2e]'
     )}>
+      {/* Row number */}
+      {num !== undefined && !task.completed && (
+        <span className="w-5 text-center text-[10px] font-semibold text-[#3a3a3f] flex-shrink-0 select-none">
+          {num}
+        </span>
+      )}
       {/* Checkbox */}
       <button
         onClick={() => onToggle(task.id)}
@@ -137,8 +144,8 @@ function TaskRow({ task, onToggle, onDelete, onUpdate }: {
   )
 }
 
-function Section({ title, tasks, color, onToggle, onDelete, onUpdate }: {
-  title: string; tasks: Task[]; color?: string
+function Section({ title, tasks, color, startNum = 1, onToggle, onDelete, onUpdate }: {
+  title: string; tasks: Task[]; color?: string; startNum?: number
   onToggle: (id: string) => void
   onDelete: (id: string) => void
   onUpdate: (id: string, updates: Partial<Pick<Task, 'title' | 'completed' | 'due_date' | 'priority'>>) => void
@@ -150,7 +157,7 @@ function Section({ title, tasks, color, onToggle, onDelete, onUpdate }: {
         {title} <span className="font-normal opacity-60">({tasks.length})</span>
       </div>
       <div className="space-y-1.5">
-        {tasks.map(t => <TaskRow key={t.id} task={t} onToggle={onToggle} onDelete={onDelete} onUpdate={onUpdate} />)}
+        {tasks.map((t, i) => <TaskRow key={t.id} task={t} num={startNum + i} onToggle={onToggle} onDelete={onDelete} onUpdate={onUpdate} />)}
       </div>
     </div>
   )
@@ -288,10 +295,10 @@ export default function TasksView({ tasks, todayTasks, upcomingTasks, overdueTas
       )}
       {filter === 'all' && (
         <>
-          <Section title="Overdue" tasks={overdueTasks} color="text-[#f56565]" {...sharedProps} />
-          <Section title="Today" tasks={todayTasks} color="text-[#34c972]" {...sharedProps} />
-          <Section title="Upcoming" tasks={upcomingTasks} color="text-[#7c6af7]" {...sharedProps} />
-          <Section title="No date" tasks={noDateTasks} color="text-[#4a4a55]" {...sharedProps} />
+          <Section title="Overdue" tasks={overdueTasks} color="text-[#f56565]" startNum={1} {...sharedProps} />
+          <Section title="Today" tasks={todayTasks} color="text-[#34c972]" startNum={overdueTasks.length + 1} {...sharedProps} />
+          <Section title="Upcoming" tasks={upcomingTasks} color="text-[#7c6af7]" startNum={overdueTasks.length + todayTasks.length + 1} {...sharedProps} />
+          <Section title="No date" tasks={noDateTasks} color="text-[#4a4a55]" startNum={overdueTasks.length + todayTasks.length + upcomingTasks.length + 1} {...sharedProps} />
           {tasks.filter(t => !t.completed).length === 0 && (
             <div className="text-center py-16">
               <p className="text-sm text-[#4a4a55]">No tasks yet. Create one above.</p>

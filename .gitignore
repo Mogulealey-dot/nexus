@@ -36,6 +36,10 @@ yarn-error.log*
 # vercel
 .vercel
 
+# email digest secrets (never commit these)
+scripts/gmail-credentials.json
+scripts/gmail-token.json
+
 # typescript
 *.tsbuildinfo
 next-env.d.ts

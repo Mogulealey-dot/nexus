@@ -34,6 +34,7 @@
     "@tiptap/react": "^3.20.1",
     "@tiptap/starter-kit": "^3.20.1",
     "@tiptap/suggestion": "^3.20.1",
+    "@tiptap/y-tiptap": "^3.0.2",
     "@xenova/transformers": "^2.17.2",
     "ai": "^6.0.116",
     "clsx": "^2.1.1",

@@ -28,7 +28,12 @@ export async function GET() {
 
   const authUrl = oAuth2.generateAuthUrl({
     access_type: 'offline',
-    scope: ['https://www.googleapis.com/auth/gmail.readonly'],
+    scope: [
+      'https://www.googleapis.com/auth/gmail.readonly',
+      'https://www.googleapis.com/auth/calendar.readonly',
+      'https://www.googleapis.com/auth/drive.readonly',
+      'https://www.googleapis.com/auth/tasks',
+    ],
     prompt: 'consent',
     state: user.id,
   })
